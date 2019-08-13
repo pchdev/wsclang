@@ -1,0 +1,6 @@
+[submodule "dependencies/mongoose"]
+	path = dependencies/mongoose
+	url = https://github.com/cesanta/mongoose.git
+[submodule "dependencies/supercollider"]
+	path = dependencies/supercollider
+	url = https://github.com/supercollider/supercollider.git
