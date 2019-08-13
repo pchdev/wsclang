@@ -22,8 +22,10 @@
 #include "PyrInterpreter.h"
 #include "GC.h"
 #include "SC_LanguageClient.h"
-#include "websocket/mongoose.h"
+#include "scsynthsend.h"
 #include <iostream>
+
+#include "../dependencies/mongoose/mongoose.h"
 
 // ------------------------------------------------------------------------------------------------
 using pyrslot   = PyrSlot;

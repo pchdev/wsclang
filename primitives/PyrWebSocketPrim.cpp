@@ -1,11 +1,16 @@
-#include "PyrOssiaPrim.h"
-#include "OSCData.h"
+#include "PyrWebSocketPrim.hpp"
 
 #define strmaxle 4096
 
 // ------------------------------------------------------------------------------------------------
 extern bool compiledOK;
 using namespace sclang;
+
+pyrobject*
+ConvertOSCMessage(int sz, char* data);
+
+int
+makeSynthMsgWithTags(big_scpacket* packet, PyrSlot* slots, int size);
 
 // ------------------------------------------------------------------------------------------------
 template<> inline bool
