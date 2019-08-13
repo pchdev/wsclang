@@ -1,5 +1,10 @@
-mkdir dependencies
-cd dependencies
-git clone --recursive https://github.com/supercollider/supercollider.git
-cd supercollider
-git checkout 3.10
+yes | cp -rf overwrites/lang/CMakeLists.txt dependencies/supercollider/lang
+yes | cp -rf overwrites/lang/LangPrimSource/OSCData.cpp dependencies/supercollider/lang/LangPrimSource
+yes | cp -rf overwrites/lang/LangPrimSource/PyrPrimitive.cpp dependencies/supercollider/lang/LangPrimSource
+
+mkdir build
+cd build 
+cmake ../dependencies/supercollider
+make -j8
+sudo make install
+
