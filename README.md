@@ -1,11 +1,12 @@
 # wsclang
 
-a tester repository for sclang websocket primitives proposal
+a tester repository for sclang websocket primitives proposal, using sc3.10 and mongoose library at the moment
 
 ## installing
 
-- recursive clone this repository (`git clone --recursive https://github/com/pchdev/wsclang.git`), cd into it
-- run build.sh
+- recursive clone this repository (`git clone --recursive https://github/com/pchdev/wsclang.git`)
+- cd into it
+- modify/run build.sh
 
 ## usage example
 
