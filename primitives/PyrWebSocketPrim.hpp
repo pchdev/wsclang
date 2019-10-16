@@ -24,6 +24,7 @@
 #include "SC_LanguageClient.h"
 #include "scsynthsend.h"
 #include <iostream>
+#include <thread>
 
 #include "../dependencies/mongoose/mongoose.h"
 
@@ -141,7 +142,7 @@ class Server
     mg_mgr
     m_mginterface;
 
-    pthread_t
+    std::thread
     m_mgthread,
     m_avthread;
 
@@ -167,7 +168,7 @@ public:
         m_type(zctype)
     {
         initialize();
-    }
+    }   
 
     // ------------------------------------------------------------------------------------------------
     void
@@ -178,12 +179,12 @@ public:
         char s_tcp[5];
         sprintf(s_tcp, "%d", m_port);
 
-        fprintf(stdout, "[websocket] binding server on port %d\n", m_port);
+        postfl("[websocket] binding server on port %d\n", m_port);
 
         auto connection = mg_bind(&m_mginterface, s_tcp, ws_event_handler);
         mg_set_protocol_http_websocket(connection);
 
-        fprintf(stdout, "[avahi] registering service: %s\n", m_name.c_str());
+        postfl("[avahi] registering service: %s\n", m_name.c_str());
 
         int err     = 0;
         m_avpoll    = avahi_simple_poll_new();
@@ -191,7 +192,7 @@ public:
                       static_cast<AvahiClientFlags>(0), avahi_client_callback, this, &err);
 
         if (err) {
-            fprintf(stdout, "[avahi] error creating new client: %d\n", err);
+            postfl("[avahi] error creating new client: %d\n", err);
             // memo -26 = daemon not running,
             // with systemd, just do $systemctl enable avahi-daemon.service
         }
@@ -204,13 +205,21 @@ public:
     ~Server()
     // ------------------------------------------------------------------------------------------------
     {
+        postfl("[websocket] destroying server");
         m_running = false;
-        pthread_join(m_mgthread, nullptr);
-        pthread_join(m_avthread, nullptr);
+
+        if (m_mgthread.joinable()) {
+            m_mgthread.join();
+        }
+        else postfl("unable to join mongoose thread");
+
+        if (m_avthread.joinable()) {
+            m_avthread.join();
+        }
+        else postfl("unable to join avahi thread");
 
         avahi_client_free(m_avclient);
         avahi_simple_poll_free(m_avpoll);
-
         mg_mgr_free(&m_mginterface);
     }
 
@@ -219,8 +228,8 @@ public:
     poll()
     //-------------------------------------------------------------------------------------------------
     {
-        pthread_create(&m_mgthread, nullptr, pthread_server_poll, this);
-        pthread_create(&m_avthread, nullptr, pthread_avahi_poll, this);
+        m_mgthread = std::thread(pthread_server_poll, this);
+        m_avthread = std::thread(pthread_avahi_poll, this);
     }
 
     //-------------------------------------------------------------------------------------------------
@@ -241,7 +250,9 @@ public:
     //-------------------------------------------------------------------------------------------------
     {
         auto server = static_cast<Server*>(udata);
-        avahi_simple_poll_loop(server->m_avpoll);
+
+        while (server->m_running)
+              avahi_simple_poll_iterate(server->m_avpoll, 200);
         return nullptr;
     }
 
@@ -266,7 +277,6 @@ public:
             postfl("[avahi] entry group failure\n");
             break;
         }
-
         }
     }
 
@@ -342,7 +352,7 @@ class Client
     Connection
     m_connection;
 
-    pthread_t
+    std::thread
     m_thread;
 
     mg_mgr
@@ -388,7 +398,7 @@ public:
         assert(m_connection.connection); //for now
 
         m_running = true;
-        pthread_create(&m_thread, nullptr, pthread_client_poll, this);
+        m_thread = std::thread(pthread_client_poll, this);
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -408,7 +418,13 @@ public:
     ~Client()
     // ------------------------------------------------------------------------------------------------
     {
-        pthread_join(m_thread, nullptr);
+        m_running = false;
+        postfl("[websocket] destroying client");
+
+        if (m_thread.joinable())
+            m_thread.join();
+        else postfl("unable to join mongoose thread");
+
         mg_mgr_free(&m_ws_mgr);
         mg_mgr_free(&m_http_mgr);
     }
@@ -420,7 +436,7 @@ public:
     {
         auto client = static_cast<Client*>(udata);
         while (client->m_running) {
-            mg_mgr_poll(&client->m_ws_mgr, 200);
+              mg_mgr_poll(&client->m_ws_mgr, 200);
 //            mg_mgr_poll(&client->m_http_mgr, 200);
         }
 
