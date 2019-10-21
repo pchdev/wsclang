@@ -36,6 +36,8 @@ w.onHttpRequestReceived = { |req|
 	postln("[http-server] request received");
 	postln(format("[http-server] uri: %", req.uri));
 
+	w[0].writeText("{TON_JSON}");
+
 	if (req.query.isEmpty().not()) {
 		postln(format("[http-server] query: %", req.query));
 	};

@@ -224,6 +224,19 @@ network::Server::ws_event_handler(mg_connection* mgc, int event, void* data)
     }
     case MG_EV_CLOSE:
     {
+        if (mgc->flags & MG_F_IS_WEBSOCKET) {
+            network::Connection* rem = nullptr;
+            for (auto& con : server->m_connections) {
+                if (con == mgc) {
+                    rem = &con;
+                    sclang::return_data(server->object, &con, "pvOnDisconnection");
+                }
+            }
+
+            if (rem != nullptr)
+                server->remove_connection(*rem);
+        }
+
         break;
     }
     }
@@ -506,5 +519,4 @@ network::initialize()
 
     WS_DECLPRIM  ("_HttpRequestBind", pyr_http_request_bind, 1, 0);
     WS_DECLPRIM  ("_HttpReply", pyr_http_reply, 4, 0);
-
 }

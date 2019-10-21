@@ -20,6 +20,8 @@ WebSocketConnection
 		this.prmBind();
 	}
 
+	isPtr { |ptr| ^m_ptr == ptr; }
+
 	prmBind {
 		_WebSocketConnectionBind
 		^this.primitiveFailed
@@ -303,8 +305,18 @@ WebSocketServer
 		m_hcb.value(screq);
 	}
 
-	pvOnDisconnection { |connection|
+	pvOnDisconnection { |cptr|
+		var rem;
+		m_connections.do({|wcon|
+			if (wcon.isPtr(cptr)) {
+				m_dcb.value(wcon);
+				rem = wcon;
+			}
+		});
 
+		if (rem.notNil()) {
+			m_connections.removeAll(rem);
+		}
 	}
 
 	free {

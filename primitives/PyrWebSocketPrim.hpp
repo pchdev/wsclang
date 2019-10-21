@@ -210,13 +210,15 @@ public:
 
         if (m_mgthread.joinable()) {
             m_mgthread.join();
+        } else {
+            postfl("unable to join mongoose thread");
         }
-        else postfl("unable to join mongoose thread");
 
         if (m_avthread.joinable()) {
             m_avthread.join();
+        } else {
+            postfl("unable to join avahi thread");
         }
-        else postfl("unable to join avahi thread");
 
         avahi_client_free(m_avclient);
         avahi_simple_poll_free(m_avpoll);
@@ -228,32 +230,26 @@ public:
     poll()
     //-------------------------------------------------------------------------------------------------
     {
-        m_mgthread = std::thread(pthread_server_poll, this);
-        m_avthread = std::thread(pthread_avahi_poll, this);
+        m_mgthread = std::thread(&Server::mg_poll, this);
+        m_avthread = std::thread(&Server::avahi_poll, this);
     }
 
     //-------------------------------------------------------------------------------------------------
-    static void*
-    pthread_server_poll(void* udata)
+    void
+    mg_poll()
     //-------------------------------------------------------------------------------------------------
     {
-        auto server = static_cast<Server*>(udata);
-        while (server->m_running)
-            mg_mgr_poll(&server->m_mginterface, 200);
-
-        return nullptr;
+        while (m_running)
+               mg_mgr_poll(&m_mginterface, 200);
     }
 
     //-------------------------------------------------------------------------------------------------
-    static void*
-    pthread_avahi_poll(void* udata)
+    void
+    avahi_poll()
     //-------------------------------------------------------------------------------------------------
-    {
-        auto server = static_cast<Server*>(udata);
-
-        while (server->m_running)
-              avahi_simple_poll_iterate(server->m_avpoll, 200);
-        return nullptr;
+    {        
+        while (m_running)
+              avahi_simple_poll_iterate(m_avpoll, 200);
     }
 
     //-------------------------------------------------------------------------------------------------
@@ -343,6 +339,13 @@ public:
     //-------------------------------------------------------------------------------------------------
     static void
     ws_event_handler(mg_connection* mgc, int event, void* data);
+
+    void
+    remove_connection(Connection const& con)
+    {
+        m_connections.erase(std::remove(m_connections.begin(), m_connections.end(), con),
+                            m_connections.end());
+    }
 };
 
 // ------------------------------------------------------------------------------------------------
@@ -398,7 +401,7 @@ public:
         assert(m_connection.connection); //for now
 
         m_running = true;
-        m_thread = std::thread(pthread_client_poll, this);
+        m_thread = std::thread(&Client::poll, this);
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -430,17 +433,14 @@ public:
     }
 
     //-------------------------------------------------------------------------------------------------
-    static void*
-    pthread_client_poll(void* udata)
+    void
+    poll()
     //-------------------------------------------------------------------------------------------------
-    {
-        auto client = static_cast<Client*>(udata);
-        while (client->m_running) {
-              mg_mgr_poll(&client->m_ws_mgr, 200);
+    {        
+        while (m_running) {
+              mg_mgr_poll(&m_ws_mgr, 200);
 //            mg_mgr_poll(&client->m_http_mgr, 200);
         }
-
-        return nullptr;
     }
 
     // ------------------------------------------------------------------------------------------------
