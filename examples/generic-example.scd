@@ -28,6 +28,10 @@ w.onNewConnection = { |con|
 	};
 };
 
+w.onDisconnection = { |con|
+	postln(format("[websocket-server] client %:%: disconnected", con.address, con.port));
+};
+
 w.onHttpRequestReceived = { |req|
 	// the websocket server keeps its http-server functionalities
 	// meaning it can receive standard non-websocket http requests from browsers or other http clients
@@ -35,8 +39,6 @@ w.onHttpRequestReceived = { |req|
 
 	postln("[http-server] request received");
 	postln(format("[http-server] uri: %", req.uri));
-
-	w[0].writeText("{TON_JSON}");
 
 	if (req.query.isEmpty().not()) {
 		postln(format("[http-server] query: %", req.query));
