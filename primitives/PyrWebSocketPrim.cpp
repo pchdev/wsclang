@@ -131,9 +131,11 @@ sclang::return_data(pyrobject* object, std::vector<T> data, const char* sym)
     if (compiledOK) {
         auto g = gMainVMGlobals;
         g->canCallOS = true;
-        ++g->sp; sclang::write<pyrobject*>(g->sp, object);
+        ++g->sp;
+        sclang::write<pyrobject*>(g->sp, object);
         for (const auto& d : data) {
-              ++g->sp; sclang::write<T>(g->sp, d);
+             ++g->sp;
+             sclang::write<T>(g->sp, d);
         }
 
         runInterpreter(g, getsym(sym), data.size()+1);
@@ -168,7 +170,8 @@ parse_websocket_frame(websocket_message* message, pyrobject* dest)
         // might be OSC
         auto data = reinterpret_cast<char*>(message->data);
 
-        // this is weird... binary data starts at byte 4
+        // binary data starts at byte 4
+        // why.. header should've been removed at that point...??
         data += 4;
 
         // we have to check for osc messages and bundles,
@@ -176,7 +179,6 @@ parse_websocket_frame(websocket_message* message, pyrobject* dest)
         auto array = ConvertOSCMessage(message->size, data);
         sclang::return_data(dest, array, "pvOnOscMessageReceived");
     }
-
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -225,16 +227,21 @@ network::Server::ws_event_handler(mg_connection* mgc, int event, void* data)
     case MG_EV_CLOSE:
     {
         if (mgc->flags & MG_F_IS_WEBSOCKET) {
-            network::Connection* rem = nullptr;
-            for (auto& con : server->m_connections) {
-                if (con == mgc) {
-                    rem = &con;
-                    sclang::return_data(server->object, &con, "pvOnDisconnection");
+
+            if (server->m_running == false)
+                // ignore if server is not running
+                return;
+
+            network::Connection* to_remove = nullptr;
+            for (auto& connection : server->m_connections) {
+                if (connection == mgc) {
+                    to_remove = &connection;
+                    sclang::return_data(server->object, &connection, "pvOnDisconnection");
                 }
             }
 
-            if (rem != nullptr)
-                server->remove_connection(*rem);
+            if (to_remove)
+                server->remove_connection(*to_remove);
         }
 
         break;

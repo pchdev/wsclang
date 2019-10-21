@@ -208,16 +208,16 @@ public:
         postfl("[websocket] destroying server");
         m_running = false;
 
-        if (m_mgthread.joinable()) {
+        if (m_mgthread.joinable()) {            
             m_mgthread.join();
         } else {
-            postfl("unable to join mongoose thread");
+            postfl("[websocket] server: unable to join mongoose thread");
         }
 
         if (m_avthread.joinable()) {
             m_avthread.join();
         } else {
-            postfl("unable to join avahi thread");
+            postfl("[websocket] server: unable to join avahi thread");
         }
 
         avahi_client_free(m_avclient);
@@ -309,7 +309,7 @@ public:
                     nullptr, nullptr, server->m_port, nullptr);
 
                 if (err) {
-                     postfl("Failed to add service: %s\n", avahi_strerror(err));
+                     postfl("[avahi] Failed to add service: %s\n", avahi_strerror(err));
                      return;
                 }
 
@@ -317,7 +317,7 @@ public:
                 err = avahi_entry_group_commit(group);
 
                 if (err) {
-                    postfl("Failed to commit group: %s\n", avahi_strerror(err));
+                    postfl("[avahi] Failed to commit group: %s\n", avahi_strerror(err));
                     return;
                 }
             }
@@ -424,9 +424,11 @@ public:
         m_running = false;
         postfl("[websocket] destroying client");
 
-        if (m_thread.joinable())
+        if (m_thread.joinable()) {
             m_thread.join();
-        else postfl("unable to join mongoose thread");
+        } else {
+            postfl("[websocket] client: unable to join mongoose thread");
+        }
 
         mg_mgr_free(&m_ws_mgr);
         mg_mgr_free(&m_http_mgr);
