@@ -222,7 +222,6 @@ network::Server::ws_event_handler(mg_connection* mgc, int event, void* data)
     case MG_EV_HTTP_REQUEST:
     {
         http_message* hm = static_cast<http_message*>(data);
-        postfl("[mongoose] mg_ev_http_request: %s\n", hm->uri.p);
         auto req = new HttpRequest(mgc, hm);
         sclang::return_data(server->object, req, "pvOnHttpRequestReceived");
         break;
@@ -326,8 +325,6 @@ pyr_ws_con_write_text(vmglobals* g, int)
 {
     auto nc     = sclang::read<network::Connection*>(g->sp-1, 0);
     auto text   = sclang::read<std::string>(g->sp);
-
-    postfl("[websocket] out: %s", text.c_str());
 
     mg_send_websocket_frame(nc->connection, WEBSOCKET_OP_TEXT, text.c_str(), text.size());
     return errNone;

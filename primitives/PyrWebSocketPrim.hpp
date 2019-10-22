@@ -187,7 +187,6 @@ public:
             return;
         }
 
-        postfl("[websocket] upgrade protocol http/websocket\n");
         mg_set_protocol_http_websocket(connection);
 
         postfl("[avahi] registering service: %s\n", m_name.c_str());
@@ -205,7 +204,6 @@ public:
 
         m_running = true;
         poll();
-        postfl("[websocket] server running\n");
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -423,11 +421,8 @@ public:
         m_running = false;
         postfl("[websocket] destroying client\n");
 
-        if (m_thread.joinable()) {
-            m_thread.join();
-        } else {
-            postfl("[websocket] client: unable to join mongoose thread\n");
-        }
+        assert(m_thread.joinable());
+        m_thread.join();
 
         mg_mgr_free(&m_ws_mgr);
         mg_mgr_free(&m_http_mgr);
