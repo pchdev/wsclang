@@ -200,12 +200,14 @@ network::Server::ws_event_handler(mg_connection* mgc, int event, void* data)
         server->m_connections.push_back(c);
         // at this point, the pyrobject has not been set
         //it will have to go through the "bind" primitive call first
+        postfl("[mongoose] server: mg_ev_websocket_handshake_done\n");
         sclang::return_data(server->object, &server->m_connections.back(), "pvOnNewConnection");
         break;
     }
     case MG_EV_WEBSOCKET_FRAME:
     {
         auto wm = static_cast<websocket_message*>(data);
+        postfl("[mongoose] server: websocket frame received: %s\n", wm->data);
 
         // lookup connection
         auto connection = std::find(
@@ -220,6 +222,7 @@ network::Server::ws_event_handler(mg_connection* mgc, int event, void* data)
     case MG_EV_HTTP_REQUEST:
     {
         http_message* hm = static_cast<http_message*>(data);
+        postfl("[mongoose] mg_ev_http_request: %s\n", hm->uri.p);
         auto req = new HttpRequest(mgc, hm);
         sclang::return_data(server->object, req, "pvOnHttpRequestReceived");
         break;
@@ -294,7 +297,7 @@ network::Client::event_handler(mg_connection* mgc, int event, void* data)
 
 // ------------------------------------------------------------------------------------------------
 int
-pyr_ws_con_bind(VMGlobals* g, int)
+pyr_ws_con_bind(vmglobals* g, int)
 // ------------------------------------------------------------------------------------------------
 {
     auto nc     = sclang::read<network::Connection*>(g->sp, 0);
@@ -318,11 +321,13 @@ pyr_ws_con_bind(VMGlobals* g, int)
 
 // ------------------------------------------------------------------------------------------------
 int
-pyr_ws_con_write_text(VMGlobals* g, int)
+pyr_ws_con_write_text(vmglobals* g, int)
 // ------------------------------------------------------------------------------------------------
 {
     auto nc     = sclang::read<network::Connection*>(g->sp-1, 0);
     auto text   = sclang::read<std::string>(g->sp);
+
+    postfl("[websocket] out: %s", text.c_str());
 
     mg_send_websocket_frame(nc->connection, WEBSOCKET_OP_TEXT, text.c_str(), text.size());
     return errNone;
@@ -330,7 +335,7 @@ pyr_ws_con_write_text(VMGlobals* g, int)
 
 // ------------------------------------------------------------------------------------------------
 int
-pyr_ws_con_write_osc(VMGlobals* g, int n)
+pyr_ws_con_write_osc(vmglobals* g, int n)
 // ------------------------------------------------------------------------------------------------
 {
     pyrslot* cslot = g->sp-n+1;
@@ -351,7 +356,7 @@ pyr_ws_con_write_osc(VMGlobals* g, int n)
 
 // ------------------------------------------------------------------------------------------------
 int
-pyr_ws_con_write_binary(VMGlobals* g, int)
+pyr_ws_con_write_binary(vmglobals* g, int)
 // ------------------------------------------------------------------------------------------------
 {
     auto connection = sclang::read<network::Connection*>(g->sp-1, 0);
@@ -360,7 +365,7 @@ pyr_ws_con_write_binary(VMGlobals* g, int)
 
 // ------------------------------------------------------------------------------------------------
 int
-pyr_ws_client_create(VMGlobals* g, int)
+pyr_ws_client_create(vmglobals* g, int)
 // ------------------------------------------------------------------------------------------------
 {    
     auto client = new network::Client;
@@ -372,7 +377,7 @@ pyr_ws_client_create(VMGlobals* g, int)
 
 // ------------------------------------------------------------------------------------------------
 int
-pyr_ws_client_connect(VMGlobals* g, int)
+pyr_ws_client_connect(vmglobals* g, int)
 // ------------------------------------------------------------------------------------------------
 {
     auto client = sclang::read<network::Client*>(g->sp-2, 0);
@@ -397,7 +402,7 @@ pyr_ws_client_zconnect(vmglobals* g, int)
 
 // ------------------------------------------------------------------------------------------------
 int
-pyr_ws_client_disconnect(VMGlobals* g, int)
+pyr_ws_client_disconnect(vmglobals* g, int)
 // ------------------------------------------------------------------------------------------------
 {
     return errNone;
@@ -405,7 +410,7 @@ pyr_ws_client_disconnect(VMGlobals* g, int)
 
 // ------------------------------------------------------------------------------------------------
 int
-pyr_ws_client_free(VMGlobals* g, int)
+pyr_ws_client_free(vmglobals* g, int)
 // ------------------------------------------------------------------------------------------------
 {
     auto client = sclang::read<network::Client*>(g->sp, 0);
@@ -416,7 +421,7 @@ pyr_ws_client_free(VMGlobals* g, int)
 
 // ------------------------------------------------------------------------------------------------
 int
-pyr_ws_server_instantiate_run(VMGlobals* g, int)
+pyr_ws_server_instantiate_run(vmglobals* g, int)
 // ------------------------------------------------------------------------------------------------
 {
     int port = sclang::read<int>(g->sp-2);
@@ -432,7 +437,7 @@ pyr_ws_server_instantiate_run(VMGlobals* g, int)
 
 // ------------------------------------------------------------------------------------------------
 int
-pyr_ws_server_free(VMGlobals* g, int)
+pyr_ws_server_free(vmglobals* g, int)
 // ------------------------------------------------------------------------------------------------
 {
     auto server = sclang::read<network::Server*>(g->sp, 0);
@@ -509,7 +514,6 @@ network::initialize()
     int base = nextPrimitiveIndex(), index = 0;
 
     WS_DECLPRIM  ("_WebSocketConnectionWriteText", pyr_ws_con_write_text, 2, 0);
-
     WS_DECLPRIM  ("_WebSocketConnectionWriteOsc", pyr_ws_con_write_osc, 1, 1);
     WS_DECLPRIM  ("_WebSocketConnectionWriteBinary", pyr_ws_con_write_binary, 2, 0);
     WS_DECLPRIM  ("_WebSocketConnectionBind", pyr_ws_con_bind, 1, 0);

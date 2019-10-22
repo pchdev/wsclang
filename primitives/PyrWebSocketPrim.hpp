@@ -179,9 +179,15 @@ public:
         char s_tcp[5];
         sprintf(s_tcp, "%d", m_port);
 
-        postfl("[websocket] binding server on port %d\n", m_port);
+        postfl("[websocket] binding server socket on port %d\n", m_port);
 
-        auto connection = mg_bind(&m_mginterface, s_tcp, ws_event_handler);
+        mg_connection* connection = mg_bind(&m_mginterface, s_tcp, ws_event_handler);
+        if (connection == nullptr) {
+            postfl("[websocket] error, could not bind server on port %d\n", m_port);
+            return;
+        }
+
+        postfl("[websocket] upgrade protocol http/websocket\n");
         mg_set_protocol_http_websocket(connection);
 
         postfl("[avahi] registering service: %s\n", m_name.c_str());
@@ -199,26 +205,22 @@ public:
 
         m_running = true;
         poll();
+        postfl("[websocket] server running\n");
     }
 
     // ------------------------------------------------------------------------------------------------
     ~Server()
     // ------------------------------------------------------------------------------------------------
     {
-        postfl("[websocket] destroying server");
+        postfl("[websocket] destroying server\n");
         m_running = false;
 
-        if (m_mgthread.joinable()) {            
-            m_mgthread.join();
-        } else {
-            postfl("[websocket] server: unable to join mongoose thread");
-        }
+        // don't leave interpreter hanging, just crash the damn thing instead..
+        assert(m_mgthread.joinable());
+        assert(m_avthread.joinable());
 
-        if (m_avthread.joinable()) {
-            m_avthread.join();
-        } else {
-            postfl("[websocket] server: unable to join avahi thread");
-        }
+        m_mgthread.join();
+        m_avthread.join();
 
         avahi_client_free(m_avclient);
         avahi_simple_poll_free(m_avpoll);
@@ -249,7 +251,7 @@ public:
     //-------------------------------------------------------------------------------------------------
     {        
         while (m_running)
-              avahi_simple_poll_iterate(m_avpoll, 200);
+               avahi_simple_poll_iterate(m_avpoll, 200);
     }
 
     //-------------------------------------------------------------------------------------------------
@@ -290,10 +292,9 @@ public:
         case AVAHI_CLIENT_S_RUNNING:
         {
             postfl("[avahi] client running\n");
-
             auto group = server->m_avgroup;
-            if(!group)
-            {
+
+            if(!group) {
                 postfl("[avahi] creating entry group\n");
                 group  = avahi_entry_group_new(client, avahi_group_callback, server);
                 server->m_avgroup = group;
@@ -323,14 +324,12 @@ public:
             }
             break;
         }
-        case AVAHI_CLIENT_FAILURE:
-        {
-            postfl("[avahi] client failure");
+        case AVAHI_CLIENT_FAILURE: {
+            postfl("[avahi] client failure\n");
             break;
         }
-        case AVAHI_CLIENT_S_COLLISION:
-        {
-            postfl("[avahi] client collision");
+        case AVAHI_CLIENT_S_COLLISION: {
+            postfl("[avahi] client collision\n");
             break;
         }
         }
@@ -422,12 +421,12 @@ public:
     // ------------------------------------------------------------------------------------------------
     {
         m_running = false;
-        postfl("[websocket] destroying client");
+        postfl("[websocket] destroying client\n");
 
         if (m_thread.joinable()) {
             m_thread.join();
         } else {
-            postfl("[websocket] client: unable to join mongoose thread");
+            postfl("[websocket] client: unable to join mongoose thread\n");
         }
 
         mg_mgr_free(&m_ws_mgr);
