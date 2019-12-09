@@ -12,7 +12,8 @@ a tester repository for sclang websocket primitives proposal, using sc3.10 and m
 
 ```js
 (
-w = WebSocketServer(5678, "supercollider", "_oscjson._tcp");
+w = WebSocketServer(5678);
+z = ZeroconfService("supercollider", "_oscjson._tcp", 5678);
 // instantiates and runs a websocket server
 // the server should be zeroconf-visible (as 'supercollider') by client devices (with the type '_oscjson._tcp', which is part of the oscquery specification, set here as an example)
 // see https://github.com/Vidvox/OSCQueryProposal
