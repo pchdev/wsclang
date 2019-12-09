@@ -619,7 +619,7 @@ int
 pyr_zconf_rem_service(vmglobals* g, int)
 {
 #ifdef HAVE_AVAHI
-    auto serv = wsclang::read<AvahiService*>(g->sp);
+    auto serv = wsclang::read<AvahiService*>(g->sp, 0);
 #endif
     wsclang::free(g->sp, serv);
     return errNone;
