@@ -238,12 +238,51 @@ HttpRequest
 	}
 }
 
+ZeroconfService
+{
+	var m_ptr;
+	var m_name;
+	var m_type;
+	var m_port;
+
+	classvar g_instances;
+
+	*initClass {
+		g_instances = [];
+		ShutDown.add({
+			postln("Zconf-cleanup");
+			g_instances.do(_.free());
+		})
+	}
+
+	*new { |name, type, port|
+		^this.newCopyArgs(0x0, name, type, port).zCtor()
+	}
+
+	zCtor {
+		this.prmAddService(m_name, m_type, m_port);
+	}
+
+	prmAddService { |name, type, port|
+		_ZeroconfAddService
+		^this.primitiveFailed
+	}
+
+	free {
+		g_instances.remove(this);
+		this.prmFree();
+	}
+
+	prmFree {
+		_ZeroconfRemoveService
+		^this.primitiveFailed
+	}
+}
+
 WebSocketServer
 {
 	var m_ptr;
 	var m_port;
-	var m_name;
-	var m_type;
 	var m_connections;
 	var m_ncb;
 	var m_dcb;
@@ -259,17 +298,17 @@ WebSocketServer
 		})
 	}
 
-	*new { |port, zname = "supercollider", ztype = "_oscjson._tcp"|
-		^this.newCopyArgs(0x0, port, zname, ztype).wsServerCtor();
+	*new { |port|
+		^this.newCopyArgs(0x0, port).wsServerCtor();
 	}
 
 	wsServerCtor {
 		m_connections = [];
 		g_instances = g_instances.add(this);
-		this.prmInstantiateRun(m_port, m_name, m_type);
+		this.prmInstantiateRun(m_port);
 	}
 
-	prmInstantiateRun { |port, name, type|
+	prmInstantiateRun { |port|
 		_WebSocketServerInstantiateRun
 		^this.primitiveFailed
 	}

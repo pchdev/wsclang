@@ -12,6 +12,12 @@
 #include <avahi-common/thread-watch.h>
 #include <avahi-common/timeval.h>
 #include <avahi-common/simple-watch.h>
+
+using avahi_client = AvahiClient;
+using avahi_simple_poll = AvahiSimplePoll;
+using avahi_entry_group = AvahiEntryGroup;
+using avahi_entry_group_state = AvahiEntryGroupState;
+using avahi_client_state = AvahiClientState;
 #endif
 
 #include "PyrSymbolTable.h"
@@ -28,420 +34,194 @@
 
 #include "../dependencies/mongoose/mongoose.h"
 
-// ------------------------------------------------------------------------------------------------
 using pyrslot   = PyrSlot;
 using pyrobject = PyrObject;
 using vmglobals = VMGlobals;
 using pyrint8array = PyrInt8Array;
 
-// ------------------------------------------------------------------------------------------------
-// SCLANG-GENERIC-UTILITIES
-namespace sclang {
+namespace wsclang {
 
+/* Initializes http/websocket primitives */
+void initialize();
+
+/* Calls <sym> sc-method, passing data as argument */
 template<typename T> void
 return_data(pyrobject* object, T data, const char* sym);
 
-// ------------------------------------------------------------------------------------------------
+/* Calls <sym> sc-method, passing mutiple data as arguments */
 template<typename T> void
 return_data(pyrobject* object, std::vector<T>, const char* sym);
-// calls 'sym' sc-method, passing mutiple data as arguments
 
-// ------------------------------------------------------------------------------------------------
+/* Pushes object <T> to slot <s> */
 template<typename T> void
 write(pyrslot* s, T object);
-// pushes object 'T' to slot 's'
 
-// ------------------------------------------------------------------------------------------------
+/* Pushes object <T> to  object's instvar at <index> */
 template<typename T> void
 write(pyrslot* s, T object, uint16_t index);
-// pushes object 'T' to  object's instvar 'index'
 
-// ------------------------------------------------------------------------------------------------
+/* reads object <T> from object's instvar at <index> */
 template<typename T> T
 read(pyrslot* s, uint16_t index);
-// reads object 'T' from object's instvar 'index'
 
-// ------------------------------------------------------------------------------------------------
+/* Reads object <T> from slot <s> */
 template<typename T> T
 read(pyrslot* s);
-// reads object 'T' from slot 's'
 
-// ------------------------------------------------------------------------------------------------
+/* Frees object from slot and heap */
 template<typename T> void
 free(pyrslot* s, T object);
-// frees object from slot and heap
-}
 
-// ------------------------------------------------------------------------------------------------
-// NETWORK-OBSERVERS
-namespace network {
-
-using avahi_client = AvahiClient;
-using avahi_simple_poll = AvahiSimplePoll;
-using avahi_entry_group = AvahiEntryGroup;
-
-// ------------------------------------------------------------------------------------------------
-void
-initialize();
-
-// ------------------------------------------------------------------------------------------------
-struct Connection
-// ------------------------------------------------------------------------------------------------
+/* Every wsclang class is going to have a pyrobject
+ * reference for its sclang representation.
+ * This is just for convenience */
+class Object
 {
-    pyrobject*
-    object = nullptr;
+    pyrobject* m_object = nullptr;
 
-    mg_connection*
-    connection = nullptr;
-
-    // ------------------------------------------------------------------------------------------------
-    Connection(mg_connection* mgc) : connection(mgc) {}
-
-    // ------------------------------------------------------------------------------------------------
-    bool
-    operator==(Connection const& rhs) { return connection == rhs.connection; }
-
-    bool
-    operator==(mg_connection* rhs) { return connection == rhs; }
+public:
+    void set_object(pyrobject* object)
+    {
+        m_object = object;
+    }
+    pyrobject* object()
+    {
+        return m_object;
+    }
 };
 
-// ------------------------------------------------------------------------------------------------
-struct HttpRequest
-// ------------------------------------------------------------------------------------------------
+/* Associates a sclang Connection pyrobject
+ * with a mg_connection. This is primarily
+ * used in order to lookup connections from one
+ * end or the other */
+class Connection : public Object
 {
-    pyrobject*
-    object = nullptr;
+public:
+    mg_connection* connection = nullptr;
 
-    mg_connection*
-    connection = nullptr;
+    Connection(mg_connection* mgc) :
+        connection(mgc) {}
 
-    http_message*
-    message = nullptr;
+    bool operator==(Connection const& rhs) {
+        return connection == rhs.connection;
+    }
 
-    // ------------------------------------------------------------------------------------------------
+    bool operator==(mg_connection* rhs) {
+        return connection == rhs;
+    }
+};
+
+/* Associates mg http_message with a sclang object
+ * and a mg_connection, for replying. */
+class HttpRequest : public Object
+{
+public:
+    mg_connection* connection = nullptr;
+    http_message* message = nullptr;
+
     HttpRequest(mg_connection* con, http_message* msg) :
         connection(con), message(msg) {}
 };
 
-// ------------------------------------------------------------------------------------------------
-class Server
-// ------------------------------------------------------------------------------------------------
+#ifdef HAVE_AVAHI
+class AvahiService
 {
-    avahi_simple_poll*
-    m_avpoll = nullptr;
-
-    avahi_entry_group*
-    m_avgroup = nullptr;
-
-    avahi_client*
-    m_avclient = nullptr;
-
-    std::vector<Connection>
-    m_connections;
-
-    mg_mgr
-    m_mginterface;
-
-    std::thread
-    m_mgthread,
-    m_avthread;
-
-    uint16_t
-    m_port = 5678;
-
-    std::string
-    m_name,
-    m_type;
-
-    bool
-    m_running = false;
+    avahi_simple_poll* m_poll = nullptr;
+    avahi_entry_group* m_group = nullptr;
+    avahi_client* m_client = nullptr;
+    std::thread m_thread;
+    std::string m_name;
+    std::string m_type;
+    uint16_t m_port;
+    bool m_running = false;
 
 public:
+    AvahiService(std::string name,
+                 std::string type,
+                 uint16_t port);
 
-    pyrobject*
-    object = nullptr;
+    ~AvahiService();
 
-    // ------------------------------------------------------------------------------------------------
-    Server(uint16_t port, std::string zcname, std::string zctype) :
-        m_port(port),
-        m_name(zcname),
-        m_type(zctype)
-    {
+private:
+    void poll();
+
+    static void
+    group_callback(avahi_entry_group* group,
+                   avahi_entry_group_state state,
+                   void* udata);
+
+    static void
+    client_callback(avahi_client* client,
+                    avahi_client_state state,
+                    void* udata);
+};
+#endif
+
+/* A mg websocket server, embedding dnssd capabilities
+ * (the two might be separated in the future). Storing
+ * wsclang Connection objects to be retrieved and manipulated
+ * through sclang */
+class Server : public Object
+{
+    mg_mgr m_mginterface;
+    std::vector<Connection> m_connections;
+    std::thread m_mgthread;
+    uint16_t m_port = 5678;
+    bool m_running = false;
+
+public:
+    Server(uint16_t port) : m_port(port) {
         initialize();
     }   
 
-    // ------------------------------------------------------------------------------------------------
-    void
-    initialize()
-    // ------------------------------------------------------------------------------------------------
-    {
-        mg_mgr_init(&m_mginterface, this);
-        char s_tcp[5];
-        sprintf(s_tcp, "%d", m_port);
+    /* Initializes and runs websocket server, binding on <m_port>
+     * starting dnssd as well (for now) */
+    void initialize();
 
-        postfl("[websocket] binding server socket on port %d\n", m_port);
+    /* Starts mg/dnssd thread loops */
+    void poll();
 
-        mg_connection* connection = mg_bind(&m_mginterface, s_tcp, ws_event_handler);
-        if (connection == nullptr) {
-            postfl("[websocket] error, could not bind server on port %d\n", m_port);
-            return;
-        }
+    /* Mg websocket polling loop */
+    void mg_poll();
 
-        mg_set_protocol_http_websocket(connection);
+    /* Joins mg/dnssd threads, frees its interfaces */
+    ~Server();
 
-        postfl("[avahi] registering service: %s\n", m_name.c_str());
-
-        int err     = 0;
-        m_avpoll    = avahi_simple_poll_new();
-        m_avclient  = avahi_client_new(avahi_simple_poll_get(m_avpoll),
-                      static_cast<AvahiClientFlags>(0), avahi_client_callback, this, &err);
-
-        if (err) {
-            postfl("[avahi] error creating new client: %d\n", err);
-            // memo -26 = daemon not running,
-            // with systemd, just do $systemctl enable avahi-daemon.service
-        }
-
-        m_running = true;
-        poll();
-    }
-
-    // ------------------------------------------------------------------------------------------------
-    ~Server()
-    // ------------------------------------------------------------------------------------------------
-    {
-        postfl("[websocket] destroying server\n");
-        m_running = false;
-
-        // don't leave interpreter hanging, just crash the damn thing instead..
-        assert(m_mgthread.joinable());
-        assert(m_avthread.joinable());
-
-        m_mgthread.join();
-        m_avthread.join();
-
-        avahi_client_free(m_avclient);
-        avahi_simple_poll_free(m_avpoll);
-        mg_mgr_free(&m_mginterface);
-    }
-
-    //-------------------------------------------------------------------------------------------------
-    void
-    poll()
-    //-------------------------------------------------------------------------------------------------
-    {
-        m_mgthread = std::thread(&Server::mg_poll, this);
-        m_avthread = std::thread(&Server::avahi_poll, this);
-    }
-
-    //-------------------------------------------------------------------------------------------------
-    void
-    mg_poll()
-    //-------------------------------------------------------------------------------------------------
-    {
-        while (m_running)
-               mg_mgr_poll(&m_mginterface, 200);
-    }
-
-    //-------------------------------------------------------------------------------------------------
-    void
-    avahi_poll()
-    //-------------------------------------------------------------------------------------------------
-    {        
-        while (m_running)
-               avahi_simple_poll_iterate(m_avpoll, 200);
-    }
-
-    //-------------------------------------------------------------------------------------------------
-    static void
-    avahi_group_callback(avahi_entry_group* group, AvahiEntryGroupState state, void* udata)
-    //-------------------------------------------------------------------------------------------------
-    {
-        switch(state)
-        {
-        case AVAHI_ENTRY_GROUP_REGISTERING:
-        case AVAHI_ENTRY_GROUP_ESTABLISHED:
-        case AVAHI_ENTRY_GROUP_UNCOMMITED:
-            break;
-        case AVAHI_ENTRY_GROUP_COLLISION:
-        {
-            postfl("[avahi] entry group collision\n");
-            break;
-        }
-        case AVAHI_ENTRY_GROUP_FAILURE:
-        {
-            postfl("[avahi] entry group failure\n");
-            break;
-        }
-        }
-    }
-
-    //-------------------------------------------------------------------------------------------------
-    static void
-    avahi_client_callback(avahi_client* client, AvahiClientState state, void* udata)
-    //-------------------------------------------------------------------------------------------------
-    {
-        auto server = static_cast<Server*>(udata);
-
-        switch(state)
-        {
-        case AVAHI_CLIENT_CONNECTING:
-        case AVAHI_CLIENT_S_REGISTERING:
-        case AVAHI_CLIENT_S_RUNNING:
-        {
-            postfl("[avahi] client running\n");
-            auto group = server->m_avgroup;
-
-            if(!group) {
-                postfl("[avahi] creating entry group\n");
-                group  = avahi_entry_group_new(client, avahi_group_callback, server);
-                server->m_avgroup = group;
-            }
-
-            if (avahi_entry_group_is_empty(group))
-            {
-                postfl("[avahi] adding service\n");
-
-                int err = avahi_entry_group_add_service(group,
-                    AVAHI_IF_UNSPEC, AVAHI_PROTO_INET, static_cast<AvahiPublishFlags>(0),
-                    server->m_name.c_str(), server->m_type.c_str(),
-                    nullptr, nullptr, server->m_port, nullptr);
-
-                if (err) {
-                     postfl("[avahi] Failed to add service: %s\n", avahi_strerror(err));
-                     return;
-                }
-
-                postfl("[avahi] commiting service\n");
-                err = avahi_entry_group_commit(group);
-
-                if (err) {
-                    postfl("[avahi] Failed to commit group: %s\n", avahi_strerror(err));
-                    return;
-                }
-            }
-            break;
-        }
-        case AVAHI_CLIENT_FAILURE: {
-            postfl("[avahi] client failure\n");
-            break;
-        }
-        case AVAHI_CLIENT_S_COLLISION: {
-            postfl("[avahi] client collision\n");
-            break;
-        }
-        }
-    }
-
-    //-------------------------------------------------------------------------------------------------
+    /* Websocket event handling for <Server> objects */
     static void
     ws_event_handler(mg_connection* mgc, int event, void* data);
 
-    void
-    remove_connection(Connection const& con)
+    /* Removes connection from storage when disconnected */
+    void remove_connection(Connection const& con)
     {
-        m_connections.erase(std::remove(m_connections.begin(), m_connections.end(), con),
+        m_connections.erase(std::remove(m_connections.begin(),
+                            m_connections.end(), con),
                             m_connections.end());
     }
 };
 
-// ------------------------------------------------------------------------------------------------
-class Client
-// ------------------------------------------------------------------------------------------------
+class Client : public Object
 {
-    Connection
-    m_connection;
-
-    std::thread
-    m_thread;
-
-    mg_mgr
-    m_ws_mgr,
-    m_http_mgr;
-
-    std::string
-    m_host;
-
-    uint16_t
-    m_port = 0;
-
-    bool
-    m_running = false;
+    Connection m_connection;
+    std::thread m_thread;
+    mg_mgr m_ws_mgr;
+    std::string m_host;
+    uint16_t m_port = 0;
+    bool m_running = false;
 
 public:
-
-    pyrobject*
-    object = nullptr;
-
-    // ------------------------------------------------------------------------------------------------
-    Client() : m_connection(nullptr)
-    // ------------------------------------------------------------------------------------------------
-    {
+    Client() : m_connection(nullptr) {
         mg_mgr_init(&m_ws_mgr, this);
-        mg_mgr_init(&m_http_mgr, this);
     }
 
-    // ------------------------------------------------------------------------------------------------
-    void
-    connect(std::string host, uint16_t port)
-    // ------------------------------------------------------------------------------------------------
-    {
-        m_host = host;
-        m_port = port;
+    ~Client();
 
-        std::string ws_addr("ws://");
-        ws_addr.append(host);
-        ws_addr.append(":");
-        ws_addr.append(std::to_string(port));
+    void connect(std::string host, uint16_t port);
+    void request(std::string req);
+    void poll();
 
-        m_connection.connection = mg_connect_ws(&m_ws_mgr, event_handler, ws_addr.c_str(), nullptr, nullptr);
-        assert(m_connection.connection); //for now
-
-        m_running = true;
-        m_thread = std::thread(&Client::poll, this);
-    }
-
-    // ------------------------------------------------------------------------------------------------
-    void
-    request(std::string req)
-    // ------------------------------------------------------------------------------------------------
-    {
-        std::string addr(m_host);
-        addr.append(":");
-        addr.append(std::to_string(m_port));
-        addr.append(req);
-
-        auto mgc = mg_connect_http(&m_ws_mgr, event_handler, addr.data(), nullptr, nullptr);
-    }
-
-    // ------------------------------------------------------------------------------------------------
-    ~Client()
-    // ------------------------------------------------------------------------------------------------
-    {
-        m_running = false;
-        postfl("[websocket] destroying client\n");
-
-        assert(m_thread.joinable());
-        m_thread.join();
-
-        mg_mgr_free(&m_ws_mgr);
-        mg_mgr_free(&m_http_mgr);
-    }
-
-    //-------------------------------------------------------------------------------------------------
-    void
-    poll()
-    //-------------------------------------------------------------------------------------------------
-    {        
-        while (m_running) {
-              mg_mgr_poll(&m_ws_mgr, 200);
-//            mg_mgr_poll(&client->m_http_mgr, 200);
-        }
-    }
-
-    // ------------------------------------------------------------------------------------------------
     static void
-    event_handler(mg_connection* mgc, int event, void* data);
+    ws_event_handler(mg_connection* mgc, int event, void* data);
 
 };
 

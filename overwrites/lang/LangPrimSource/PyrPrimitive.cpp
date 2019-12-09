@@ -4242,7 +4242,7 @@ void initPrimitives() {
     initSignalPrimitives();
     initArrayPrimitives();
 
-    network::initialize();
+    wsclang::initialize();
 
     void initSymbolPrimitives();
     initSymbolPrimitives();
