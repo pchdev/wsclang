@@ -14,7 +14,6 @@ a tester repository for sclang websocket primitives proposal, using sc3.10 and m
 (
 w = WebSocketServer(5678);
 z = ZeroconfService("supercollider", "_oscjson._tcp", 5678);
-// instantiates and runs a websocket server
 // the server should be zeroconf-visible (as 'supercollider') by client devices (with the type '_oscjson._tcp', which is part of the oscquery specification, set here as an example)
 // see https://github.com/Vidvox/OSCQueryProposal
 
@@ -53,8 +52,6 @@ w.onHttpRequestReceived = { |req|
 
 	postln("[http-server] request received");
 	postln(format("[http-server] uri: %", req.uri));
-
-	w[0].writeText("{TON_JSON}");
 
 	if (req.query.isEmpty().not()) {
 		postln(format("[http-server] query: %", req.query));
