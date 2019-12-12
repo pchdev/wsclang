@@ -154,6 +154,8 @@ AvahiService::AvahiService(std::string name,
                  static_cast<AvahiClientFlags>(0),
                  client_callback, this, &err);
     if (err) {
+        // memo -26 = daemon not running,
+        // with systemd, just do $systemctl enable avahi-daemon.service
         postfl("[avahi] error creating new client: %d (%s)\n", err,
                avahi_strerror(err));
     } else {
@@ -260,8 +262,6 @@ void Server::initialize()
         return;
     }
     mg_set_protocol_http_websocket(connection);
-        // memo -26 = daemon not running,
-        // with systemd, just do $systemctl enable avahi-daemon.service
     m_running = true;
     m_mgthread = std::thread(&Server::mg_poll, this);
 }
@@ -297,7 +297,7 @@ parse_websocket_frame(websocket_message* message, pyrobject* dest)
         auto data = reinterpret_cast<char*>(message->data);
         // binary data starts at byte 4
         // why.. header should've been removed at that point...??
-        data += 4;
+        // data += 4;
         // we have to check for osc messages and bundles,
         // if not, transmit as raw binary data
         auto array = ConvertOSCMessage(message->size, data);
@@ -312,7 +312,6 @@ void Server::ws_event_handler(mg_connection* mgc, int event, void* data)
     switch(event) {
     case MG_EV_RECV: break;
     case MG_EV_WEBSOCKET_HANDSHAKE_DONE: {
-        postfl("[prim] new server connection\n");
         Connection c(mgc);
         server->m_connections.push_back(c);
         // at this point, the pyrobject has not been set
@@ -456,7 +455,8 @@ int
 pyr_ws_con_write_text(vmglobals* g, int)
 {
     auto nc = wsclang::read<Connection*>(g->sp-1, 0);
-    auto text = wsclang::read<std::string>(g->sp);
+    auto text = wsclang::read<std::string>(g->sp);    
+    std::cout << "[websocket-text-out]" << text << std::endl;
     mg_send_websocket_frame(nc->connection, WEBSOCKET_OP_TEXT,
                             text.c_str(), text.size());
     return errNone;

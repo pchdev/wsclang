@@ -39,8 +39,6 @@ WebSocketConnection
 		oscMessageCallback = callback;
 	}
 
-	// prim-callbacks ---------------------------
-
 	pvOnTextMessageReceived { |message|
 		textMessageCallback.value(message);
 	}
@@ -79,8 +77,8 @@ WebSocketClient
 	var m_ptr;
 	var m_connection;
 	var <connected;
-	var m_ccb; // connected
-	var m_dcb; // disconnected
+	var m_ccb;
+	var m_dcb;
 	var m_http_cb;
 
 	classvar g_instances;
@@ -91,8 +89,6 @@ WebSocketClient
 			g_instances.do(_.free());
 		})
 	}
-
-	// CREATE -------------------------------
 
 	*new {
 		^super.new.wsClientCtor().primCreate();
@@ -108,8 +104,6 @@ WebSocketClient
 		_WebSocketClientCreate
 		^this.primitiveFailed
 	}
-
-	// CONNECTION/DISCONNECTION ------------------------------
 
 	connect { |ip, port|
 		_WebSocketClientConnect
@@ -146,8 +140,6 @@ WebSocketClient
 		m_connection = nil;
 	}
 
-	// CALLBACKS -----------------------------
-
 	onTextMessageReceived_ { |callback|
 		m_connection.onTextMessageReceived_(callback);
 	}
@@ -168,8 +160,6 @@ WebSocketClient
 		var reply = HttpRequest.newFromPrimitive(ptr);
 		m_http_cb.value(reply);
 	}
-
-	// WRITING -------------------------------
 
 	writeText { |msg|
 		m_connection.writeText(msg);
@@ -250,7 +240,6 @@ ZeroconfService
 	*initClass {
 		g_instances = [];
 		ShutDown.add({
-			postln("Zconf-cleanup");
 			g_instances.do(_.free());
 		})
 	}
@@ -293,7 +282,6 @@ WebSocketServer
 	*initClass {
 		g_instances = [];
 		ShutDown.add({
-			postln("TCP-cleanup");
 			g_instances.do(_.free());
 		})
 	}
