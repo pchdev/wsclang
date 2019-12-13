@@ -249,6 +249,7 @@ ZeroconfService
 	}
 
 	zCtor {
+		g_instances = g_instances.add(this);
 		this.prmAddService(m_name, m_type, m_port);
 	}
 

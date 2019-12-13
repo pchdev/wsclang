@@ -169,10 +169,9 @@ AvahiService::~AvahiService()
     m_running = false;
     assert(m_thread.joinable());
     m_thread.join();
-
+    // note: no need to free entry_group apparently.
     avahi_client_free(m_client);
     avahi_simple_poll_free(m_poll);
-    avahi_entry_group_free(m_group);
 }
 
 void AvahiService::poll()
@@ -217,7 +216,7 @@ void AvahiService::client_callback(avahi_client *client,
             postfl("[avahi] creating entry group\n");
             group  = avahi_entry_group_new(client, group_callback, svc);
             svc->m_group = group;
-        }
+        }        
         if (avahi_entry_group_is_empty(group)) {
             postfl("[avahi] adding service\n");
             int err = avahi_entry_group_add_service(group,
@@ -456,7 +455,6 @@ pyr_ws_con_write_text(vmglobals* g, int)
 {
     auto nc = wsclang::read<Connection*>(g->sp-1, 0);
     auto text = wsclang::read<std::string>(g->sp);    
-    std::cout << "[websocket-text-out]" << text << std::endl;
     mg_send_websocket_frame(nc->connection, WEBSOCKET_OP_TEXT,
                             text.c_str(), text.size());
     return errNone;
@@ -509,17 +507,6 @@ pyr_ws_client_connect(vmglobals* g, int)
     auto host = wsclang::read<std::string>(g->sp-1);
     auto port = wsclang::read<int>(g->sp);
     client->connect(host, port);
-    return errNone;
-}
-
-/* Connects client with zeroconf host, unimplemented */
-int
-pyr_ws_client_zconnect(vmglobals* g, int)
-{
-    auto client = wsclang::read<Client*>(g->sp-1, 0);
-    auto zchost = wsclang::read<std::string>(g->sp);
-
-    // todo
     return errNone;
 }
 
