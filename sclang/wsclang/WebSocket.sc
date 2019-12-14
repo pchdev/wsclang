@@ -261,6 +261,8 @@ WebSocketServer
 		^this.primitiveFailed
 	}
 
+	port { ^m_port }
+
 	at { |index|
 		^m_connections[index];
 	}

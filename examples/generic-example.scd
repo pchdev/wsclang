@@ -1,6 +1,6 @@
 (
 w = WebSocketServer(5678);
-z = ZeroconfService("supercollider", "_oscjson._tcp", 5678);
+z = ZeroconfService("supercollider", "_oscjson._tcp", w.port);
 // the server should be zeroconf-visible (as 'supercollider') by client devices (with the type '_oscjson._tcp', which is part of the oscquery specification, set here as an example)
 // see https://github.com/Vidvox/OSCQueryProposal
 
@@ -60,17 +60,7 @@ w.onHttpRequestReceived = { |req|
 "http://localhost:5678/?HOST_INFO".openOS();
 
 (
-b = ZeroconfBrowser("_oscjson._tcp", "score");
-b.onTargetResolved = { |target|
-	postln(format("[zeroconf] target resolved: % (%) at address: %:%",
-		target.name, target.domain, target.address, target.port));
-	target.onDisconnected = {
-		postln(format("[zeroconf] target % is now offline", target.name));
-	};
-};
-)
-
-(
+b = ZeroconfBrowser("_oscjson._tcp", "supercollider");
 c = WebSocketClient();
 
 c.onConnected = {
@@ -94,7 +84,16 @@ c.onOscMessageReceived = { |msg|
 	postln(format("[websocket-client] osc message from server: %", msg));
 };
 
-c.connect("127.0.0.1", 5678)
+b.onTargetResolved = { |target|
+	postln(format("[zeroconf] target resolved: % (%) at address: %:%",
+		          target.name, target.domain, target.address, target.port));
+	target.onDisconnected = {
+		postln(format("[zeroconf] target % is now offline", target.name));
+	};
+	// when our target 'supercollider' (our websocket server) is online and resolved
+	// through zeroconf, automatically connect the client to it from its address and port.
+	c.connect(target.address, target.port)
+};
 
 )
 
