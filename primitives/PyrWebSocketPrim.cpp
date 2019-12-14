@@ -125,22 +125,189 @@ wsclang::free(pyrslot* s, T data)
 }
 
 #ifdef HAVE_AVAHI
+
+void AvahiBrowser::initialize()
+{
+    int err;
+    if ((m_poll = avahi_simple_poll_new()) == nullptr) {
+        scpostn_av("error creating simple poll");
+        return;
+    }
+    if ((m_client = avahi_client_new(
+                    avahi_simple_poll_get(m_poll),
+                    (AvahiClientFlags) 0,
+                    client_cb, this, &err)) == nullptr) {
+        scpostn_av("error creating new client (%s)",
+                   avahi_strerror(err));
+        return;
+    }
+    if ((m_browser = avahi_service_browser_new(
+                m_client, AVAHI_IF_UNSPEC, AVAHI_PROTO_INET,
+                m_type.c_str(), NULL, (AvahiLookupFlags) 0,
+                browser_cb, this)) == nullptr) {
+        scpostn_av("error creating service browser (%s)",
+                   avahi_strerror(avahi_client_errno(m_client)));
+        return;
+    }
+    start();
+}
+
+AvahiBrowser::~AvahiBrowser()
+{
+    if (m_running)
+        stop();
+    if (m_browser)
+        avahi_service_browser_free(m_browser);
+    if (m_client)
+        avahi_client_free(m_client);
+    if (m_poll)
+        avahi_simple_poll_free(m_poll);
+}
+
+void
+AvahiBrowser::start()
+{
+    scpostn_av("starting browser thread");
+    m_running = true;
+    m_thread = std::thread(&AvahiBrowser::poll, this);
+}
+
+void
+AvahiBrowser::stop()
+{
+    m_running = false;
+    assert(m_thread.joinable());
+    m_thread.join();
+}
+
+void
+AvahiBrowser::poll()
+{
+    while (m_running)
+        avahi_simple_poll_iterate(m_poll, 200);
+}
+
+void
+AvahiBrowser::add_target(std::string target)
+{
+    m_targets.push_back(target);
+}
+
+void
+AvahiBrowser::rem_target(std::string target)
+{
+    m_targets.erase(std::remove(m_targets.begin(),
+                    m_targets.end(), target),
+                    m_targets.end());
+}
+
+void
+AvahiBrowser::resolve_cb(AvahiServiceResolver* r,
+           AVAHI_GCC_UNUSED AvahiIfIndex interface,
+           AVAHI_GCC_UNUSED AvahiProtocol protocol,
+           AvahiResolverEvent event,
+           const char* name,
+           const char* type,
+           const char* domain,
+           const char* host_name,
+           const AvahiAddress* address,
+           uint16_t port,
+           AvahiStringList* txt,
+           AvahiLookupResultFlags flags,
+           AVAHI_GCC_UNUSED void* udt)
+{
+    switch (event) {
+    case AVAHI_RESOLVER_FAILURE: {
+        scpostn_av("failed to resolve service %s", name);
+        break;
+    }
+    case AVAHI_RESOLVER_FOUND: {
+        char addr[AVAHI_ADDRESS_STR_MAX], pstr[5];
+        avahi_address_snprint(addr, AVAHI_ADDRESS_STR_MAX, address);
+        sprintf(pstr, "%d", port);
+        scpostn_av("service resolved: %s (%s), "
+                   "address: %s, port: %s", name, domain, addr, pstr);
+        // return data to sclang as an array (for now)
+        auto avb = static_cast<AvahiBrowser*>(udt);
+        std::vector<std::string> ret = { name, domain, addr, pstr };
+        wsclang::interpret<std::string>(avb->object(), ret, "pvOnTargetResolved");
+        break;
+    }
+    }
+}
+
+void
+AvahiBrowser::browser_cb(avahi_service_browser* browser,
+           AvahiIfIndex interface,
+           AvahiProtocol protocol,
+           AvahiBrowserEvent event,
+           const char* name,
+           const char* type,
+           const char* domain,
+           AVAHI_GCC_UNUSED AvahiLookupResultFlags flags,
+           void* udt)
+{
+    auto avb = static_cast<AvahiBrowser*>(udt);
+    switch (event) {
+    case AVAHI_BROWSER_FAILURE: {
+        scpostn_av("browser failed");
+        avb->m_running = false;
+        return;
+    }
+    case AVAHI_BROWSER_NEW: {
+        scpostn_av("service detected: %s (%s)", name, domain);
+        for (const auto& target : avb->m_targets) {
+            if (name == target) {
+                if ((avahi_service_resolver_new(
+                         avb->m_client,  interface, protocol,
+                         name, type, domain, AVAHI_PROTO_INET,
+                         (AvahiLookupFlags) 0, resolve_cb, avb)) == nullptr) {
+                    scpostn_av("failed to resolve target %s");
+                }
+            }
+        }
+        break;
+    }
+    case AVAHI_BROWSER_REMOVE: {
+        for (const auto& target : avb->m_targets)
+             if (name == target)
+                 wsclang::interpret(avb->object(), target, "pvOnTargetRemoved");
+        break;
+    }
+    case AVAHI_BROWSER_ALL_FOR_NOW:
+    case AVAHI_BROWSER_CACHE_EXHAUSTED:
+        break;
+    }
+}
+
+void
+AvahiBrowser::client_cb(avahi_client* client,
+          avahi_client_state state,
+          void* udt)
+{
+    auto avb = static_cast<AvahiBrowser*>(udt);
+    if (state == AVAHI_CLIENT_FAILURE) {
+        scpostn_av("client failure");
+        avb->m_running = false;
+    }
+}
+
 AvahiService::AvahiService(std::string name, std::string type, uint16_t port) :
     m_name(name),
     m_type(type),
     m_port(port)
 {
     int err = 0;
-    postfl("[avahi] registering service: %s\n", m_name.c_str());
+    scpostn_av("registering service: %s", m_name.c_str());
     m_poll = avahi_simple_poll_new();
     m_client = avahi_client_new(avahi_simple_poll_get(m_poll),
                  static_cast<AvahiClientFlags>(0),
-                 client_callback, this, &err);
+                 client_cb, this, &err);
     if (err) {
         // memo -26 = daemon not running,
         // with systemd, just do $systemctl enable avahi-daemon.service
-        postfl("[avahi] error creating new client: %d (%s)\n", err,
-               avahi_strerror(err));
+        scpostn_av("error creating new client: %d (%s)", err,
+                   avahi_strerror(err));
     } else {
         m_running = true;
         m_thread = std::thread(&AvahiService::poll, this);
@@ -163,27 +330,27 @@ void AvahiService::poll()
         avahi_simple_poll_iterate(m_poll, 200);
 }
 
-void AvahiService::group_callback(avahi_entry_group *group,
-                                  avahi_entry_group_state state,
-                                  void *udata)
+void AvahiService::group_cb(avahi_entry_group* grp,
+                            avahi_entry_group_state state,
+                            void* udt)
 {
-    switch(state) {
+    switch (state) {
     case AVAHI_ENTRY_GROUP_REGISTERING:
     case AVAHI_ENTRY_GROUP_ESTABLISHED:
     case AVAHI_ENTRY_GROUP_UNCOMMITED:
         break;
     case AVAHI_ENTRY_GROUP_COLLISION: {
-        postfl("[avahi] entry group collision\n");
+        scpostn_av("entry group collision");
         break;
     }
     case AVAHI_ENTRY_GROUP_FAILURE: {
-        postfl("[avahi] entry group failure\n");
+        scpostn_av("entry group failure");
         break;
     }
     }
 }
 
-void AvahiService::client_callback(avahi_client *client, avahi_client_state state, void *udata)
+void AvahiService::client_cb(avahi_client *client, avahi_client_state state, void *udata)
 {
     auto svc = static_cast<AvahiService*>(udata);
     switch(state) {
@@ -191,37 +358,37 @@ void AvahiService::client_callback(avahi_client *client, avahi_client_state stat
     case AVAHI_CLIENT_S_REGISTERING:
         break;
     case AVAHI_CLIENT_S_RUNNING: {
-        postfl("[avahi] client running\n");
+        scpostn_av("client running");
         auto group = svc->m_group;
         if(!group) {
-            postfl("[avahi] creating entry group\n");
-            group  = avahi_entry_group_new(client, group_callback, svc);
+            scpostn_av("creating entry group");
+            group  = avahi_entry_group_new(client, group_cb, svc);
             svc->m_group = group;
         }        
         if (avahi_entry_group_is_empty(group)) {
-            postfl("[avahi] adding service\n");
+            scpostn_av("adding service");
             int err = avahi_entry_group_add_service(group,
                         AVAHI_IF_UNSPEC, AVAHI_PROTO_INET, static_cast<AvahiPublishFlags>(0),
                         svc->m_name.c_str(), svc->m_type.c_str(),
                         nullptr, nullptr, svc->m_port, nullptr);
             if (err) {
-                 postfl("[avahi] Failed to add service: %s\n", avahi_strerror(err));
+                 scpostn_av("failed to add service: %s", avahi_strerror(err));
                  return;
             }
-            postfl("[avahi] commiting service\n");
+            scpostn_av("commiting service\n");
             if ((err = avahi_entry_group_commit(group))) {
-                postfl("[avahi] Failed to commit group: %s\n", avahi_strerror(err));
+                scpostn_av("failed to commit group: %s", avahi_strerror(err));
                 return;
             }
         }
         break;
     }
     case AVAHI_CLIENT_FAILURE: {
-        postfl("[avahi] client failure\n");
+        scpostn_av("client failure");
         break;
     }
     case AVAHI_CLIENT_S_COLLISION: {
-        postfl("[avahi] client collision\n");
+        scpostn_av("client collision");
         break;
     }
     }
@@ -233,10 +400,10 @@ void Server::initialize()
     mg_mgr_init(&m_mginterface, this);
     char s_tcp[5];
     sprintf(s_tcp, "%d", m_port);
-    postfl("[websocket] binding server socket on port %d\n", m_port);
+    scpostn_mg("binding server socket on port %d", m_port);
     mg_connection* connection = mg_bind(&m_mginterface, s_tcp, ws_event_handler);
     if (connection == nullptr) {
-        postfl("[websocket] error, could not bind server on port %d\n", m_port);
+        scpostn_mg("error, could not bind server on port %d", m_port);
         return;
     }
     mg_set_protocol_http_websocket(connection);
@@ -253,7 +420,6 @@ void Server::mg_poll()
 
 Server::~Server()
 {
-    postfl("[websocket] destroying server\n");
     m_running = false;
     // don't leave interpreter hanging, just crash the damn thing instead..
     assert(m_mgthread.joinable());
@@ -344,7 +510,7 @@ void Client::connect(std::string host, uint16_t port)
     ws_addr.append(":");
     ws_addr.append(std::to_string(port));
     m_connection.mgc = mg_connect_ws(&m_ws_mgr, ws_event_handler, ws_addr.c_str(),
-                                            nullptr, nullptr);
+                                     nullptr, nullptr);
     assert(m_connection.mgc); //for now
     m_running = true;
     m_thread = std::thread(&Client::poll, this);
@@ -363,7 +529,6 @@ void Client::request(std::string req)
 Client::~Client()
 {
     m_running = false;
-    postfl("[websocket] destroying client\n");
     assert(m_thread.joinable());
     m_thread.join();
     mg_mgr_free(&m_ws_mgr);
@@ -586,6 +751,50 @@ pyr_zconf_rem_service(vmglobals* g, int)
     return errNone;
 }
 
+int
+pyr_zconf_browser_create(vmglobals* g, int)
+{
+    auto type = wsclang::read<std::string>(g->sp);
+#ifdef HAVE_AVAHI
+    auto browser = new AvahiBrowser(type);
+#endif
+    wsclang::varwrite(g->sp-1, browser, 0);
+    browser->set_object(slotRawObject(g->sp-1));
+    return errNone;
+}
+
+int
+pyr_zconf_browser_free(vmglobals* g, int)
+{
+#ifdef HAVE_AVAHI
+    auto browser = wsclang::varread<AvahiBrowser*>(g->sp, 0);
+#endif
+    wsclang::free(g->sp, browser);
+    return errNone;
+}
+
+int
+pyr_zconf_browser_add_target(vmglobals* g, int)
+{
+#ifdef HAVE_AVAHI
+    auto brw = wsclang::varread<AvahiBrowser*>(g->sp-1, 0);
+#endif
+    auto target = wsclang::read<std::string>(g->sp);
+    brw->add_target(target);
+    return errNone;
+}
+
+int
+pyr_zconf_browser_rem_target(vmglobals* g, int)
+{
+#ifdef HAVE_AVAHI
+    auto brw = wsclang::varread<AvahiBrowser*>(g->sp-1, 0);
+#endif
+    auto target = wsclang::read<std::string>(g->sp);
+    brw->rem_target(target);
+    return errNone;
+}
+
 // -----------------------------------------------------------
 // PRIMITIVES INIT
 //------------------------------------------------------------
@@ -610,6 +819,11 @@ wsclang::initialize()
 
     WSCLANG_DECLPRIM("_WebSocketServerInstantiateRun", pyr_ws_server_instantiate_run, 2, 0);
     WSCLANG_DECLPRIM("_WebSocketServerFree", pyr_ws_server_free, 1, 0);
+
+    WSCLANG_DECLPRIM("_ZeroconfBrowserCreate", pyr_zconf_browser_create, 2, 0);
+    WSCLANG_DECLPRIM("_ZeroconfBrowserFree", pyr_zconf_browser_free, 1, 0);
+    WSCLANG_DECLPRIM("_ZeroconfBrowserAddTarget", pyr_zconf_browser_add_target, 2, 0);
+    WSCLANG_DECLPRIM("_ZeroconfBrowserRemoveTarget", pyr_zconf_browser_rem_target, 2, 0);
 
     WSCLANG_DECLPRIM("_ZeroconfAddService", pyr_zconf_add_service, 4, 0);
     WSCLANG_DECLPRIM("_ZeroconfRemoveService", pyr_zconf_rem_service, 1, 0);

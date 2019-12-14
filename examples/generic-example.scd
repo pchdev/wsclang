@@ -60,6 +60,17 @@ w.onHttpRequestReceived = { |req|
 "http://localhost:5678/?HOST_INFO".openOS();
 
 (
+b = ZeroconfBrowser("_oscjson._tcp", "score");
+b.onTargetResolved = { |target|
+	postln(format("[zeroconf] target resolved: % (%) at address: %:%",
+		target.name, target.domain, target.address, target.port));
+	target.onDisconnected = {
+		postln(format("[zeroconf] target % is now offline", target.name));
+	};
+};
+)
+
+(
 c = WebSocketClient();
 
 c.onConnected = {
