@@ -192,8 +192,8 @@ WebSocketClient
 
 Http
 {
-	*ok { ^200 }
-	*notFound { ^404 }
+	*ok        { ^200 }
+	*notFound  { ^404 }
 }
 
 HttpRequest
@@ -225,47 +225,6 @@ HttpRequest
 	replyJson { |json|
 		// we assume code is 200 here
 		this.reply(200, json, "application/json");
-	}
-}
-
-ZeroconfService
-{
-	var m_ptr;
-	var m_name;
-	var m_type;
-	var m_port;
-
-	classvar g_instances;
-
-	*initClass {
-		g_instances = [];
-		ShutDown.add({
-			g_instances.do(_.free());
-		})
-	}
-
-	*new { |name, type, port|
-		^this.newCopyArgs(0x0, name, type, port).zCtor()
-	}
-
-	zCtor {
-		g_instances = g_instances.add(this);
-		this.prmAddService(m_name, m_type, m_port);
-	}
-
-	prmAddService { |name, type, port|
-		_ZeroconfAddService
-		^this.primitiveFailed
-	}
-
-	free {
-		g_instances.remove(this);
-		this.prmFree();
-	}
-
-	prmFree {
-		_ZeroconfRemoveService
-		^this.primitiveFailed
 	}
 }
 
@@ -301,6 +260,8 @@ WebSocketServer
 		_WebSocketServerInstantiateRun
 		^this.primitiveFailed
 	}
+
+	port { ^m_port }
 
 	at { |index|
 		^m_connections[index];

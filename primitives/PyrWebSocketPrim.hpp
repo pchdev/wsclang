@@ -1,26 +1,5 @@
 #pragma once
 
-#if defined(__APPLE__) && !defined(SC_IPHONE)
-#include <CoreServices/CoreServices.h>
-
-#elif HAVE_AVAHI
-#include <avahi-client/client.h>
-#include <avahi-client/publish.h>
-#include <avahi-common/alternative.h>
-#include <avahi-common/error.h>
-#include <avahi-common/malloc.h>
-#include <avahi-common/thread-watch.h>
-#include <avahi-common/timeval.h>
-#include <avahi-common/simple-watch.h>
-
-/// this is just some style whim..
-using avahi_client = AvahiClient;
-using avahi_simple_poll = AvahiSimplePoll;
-using avahi_entry_group = AvahiEntryGroup;
-using avahi_entry_group_state = AvahiEntryGroupState;
-using avahi_client_state = AvahiClientState;
-#endif
-
 #include "PyrSymbolTable.h"
 #include "PyrSched.h"
 #include "PyrPrimitive.h"
@@ -39,6 +18,12 @@ using pyrslot   = PyrSlot;
 using pyrobject = PyrObject;
 using vmglobals = VMGlobals;
 using pyrint8array = PyrInt8Array;
+
+#define scpostn_av(_str, ...)                       \
+    postfl("[avahi] " _str "\n", ##__VA_ARGS__)
+
+#define scpostn_mg(_str, ...)                       \
+    postfl("[mongoose] " _str "\n", ##__VA_ARGS__)
 
 namespace wsclang {
 
@@ -122,33 +107,6 @@ public:
         connection(con), message(msg) {}
 };
 
-#ifdef HAVE_AVAHI
-class AvahiService
-{
-    avahi_simple_poll* m_poll = nullptr;
-    avahi_entry_group* m_group = nullptr;
-    avahi_client* m_client = nullptr;
-    std::thread m_thread;
-    std::string m_name;
-    std::string m_type;
-    uint16_t m_port;
-    bool m_running = false;
-
-public:
-    AvahiService(std::string name, std::string type, uint16_t port);
-    ~AvahiService();
-
-private:
-    void poll();
-
-    static void
-    group_callback(avahi_entry_group* group, avahi_entry_group_state state, void* udata);
-
-    static void
-    client_callback(avahi_client* client, avahi_client_state state, void* udata);
-};
-#endif
-
 /// A mg websocket server. Storing wsclang Connection objects
 /// to be retrieved and manipulated through sclang
 class Server : public Object
@@ -162,7 +120,7 @@ class Server : public Object
 public:
     Server(uint16_t port) : m_port(port) {
         initialize();
-    }   
+    }
 
     /// Initializes and runs websocket server, binding on <m_port>
     void initialize();
@@ -213,4 +171,120 @@ public:
 
 };
 
+#if defined(__APPLE__) && !defined(SC_IPHONE)
+#include <CoreServices/CoreServices.h>
+
+#elif HAVE_AVAHI
+#include <avahi-client/client.h>
+#include <avahi-client/publish.h>
+#include <avahi-client/lookup.h>
+#include <avahi-common/alternative.h>
+#include <avahi-common/error.h>
+#include <avahi-common/malloc.h>
+#include <avahi-common/thread-watch.h>
+#include <avahi-common/timeval.h>
+#include <avahi-common/simple-watch.h>
+
+/// this is just some style whim..
+using avahi_client              = AvahiClient;
+using avahi_simple_poll         = AvahiSimplePoll;
+using avahi_entry_group         = AvahiEntryGroup;
+using avahi_entry_group_state   = AvahiEntryGroupState;
+using avahi_client_state        = AvahiClientState;
+using avahi_service_browser     = AvahiServiceBrowser;
+
+class AvahiBrowser : public Object
+{
+    avahi_client* m_client = nullptr;
+    avahi_simple_poll* m_poll = nullptr;
+    avahi_service_browser* m_browser = nullptr;
+    std::string m_type;
+    std::vector<std::string> m_targets;
+    std::thread m_thread;
+    bool m_running = false;
+
+public:
+
+    AvahiBrowser(std::string type) : m_type(type) {
+        initialize();
+    }
+
+    AvahiBrowser(std::string type, std::string target) {
+        initialize();
+    }
+
+    /// Initializes avahi client, poll and browser.
+    /// Called from both constructors
+    void initialize();
+
+    void add_target(std::string target);
+    void rem_target(std::string target);
+
+    void start();
+    void poll();
+    void stop();
+
+    ~AvahiBrowser();
+
+    /// Called whenever a service has been resolved successfully
+    /// or timed out.
+    static void
+    resolve_cb(AvahiServiceResolver* r,
+               AVAHI_GCC_UNUSED AvahiIfIndex interface,
+               AVAHI_GCC_UNUSED AvahiProtocol protocol,
+               AvahiResolverEvent event,
+               const char* name,
+               const char* type,
+               const char* domain,
+               const char* host_name,
+               const AvahiAddress* address,
+               uint16_t port,
+               AvahiStringList* txt,
+               AvahiLookupResultFlags flags,
+               AVAHI_GCC_UNUSED void* udt);
+
+    /// Called whenever a new service becomes available on the LAN
+    /// or is removed from the LAN.
+    static void
+    browser_cb(avahi_service_browser* browser,
+               AvahiIfIndex interface,
+               AvahiProtocol protocol,
+               AvahiBrowserEvent event,
+               const char* name,
+               const char* type,
+               const char* domain,
+               AVAHI_GCC_UNUSED AvahiLookupResultFlags flags,
+               void* udt);
+
+    static void
+    client_cb(avahi_client* client,
+              avahi_client_state state,
+              void* udt);
+};
+
+class AvahiService
+{
+    avahi_simple_poll* m_poll = nullptr;
+    avahi_entry_group* m_group = nullptr;
+    avahi_client* m_client = nullptr;
+    std::thread m_thread;
+    std::string m_name;
+    std::string m_type;
+    uint16_t m_port;
+    bool m_running = false;
+
+public:
+    AvahiService(std::string name, std::string type, uint16_t port);
+    ~AvahiService();
+
+private:
+    void poll();
+
+    static void
+    group_cb(avahi_entry_group* group, avahi_entry_group_state state, void* udata);
+
+    static void
+    client_cb(avahi_client* client, avahi_client_state state, void* udata);
+};
+#endif
 }
