@@ -547,7 +547,7 @@ void Client::ws_event_handler(mg_connection* mgc, int event, void* data)
     }   
     case MG_EV_WEBSOCKET_FRAME: {
         auto wm = static_cast<websocket_message*>(data);
-        parse_websocket_frame(wm, client->object());
+        parse_websocket_frame(wm, client->m_connection.object());
         break;
     }
     case MG_EV_HTTP_REPLY: {
