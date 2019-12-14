@@ -3,12 +3,11 @@
 extern bool compiledOK;
 using namespace wsclang;
 
-/* We redefine headers for these two methods from OSCData.cpp
- * as they are used for reading/writing osc through websocket */
+/// We redefine headers for these two methods from OSCData.cpp
+/// as they are used for reading/writing osc through websocket
 pyrobject* ConvertOSCMessage(int sz, char* data);
 int makeSynthMsgWithTags(big_scpacket* packet, PyrSlot* slots, int size);
 
-/* Reads object 'T' from slot 's' */
 template<> inline bool
 wsclang::read(pyrslot* s) { return s->tag == tagTrue; }
 
@@ -28,20 +27,11 @@ wsclang::read(pyrslot* s)
 }
 
 template<typename T> inline T
-wsclang::read(pyrslot* s, uint16_t index)
+wsclang::varread(pyrslot* s, uint16_t index)
 {
     return static_cast<T>(slotRawPtr(&slotRawObject(s)->slots[index]));
 }
 
-/* Pushes object 'T' to slot 's', valid for
- * - int
- * - float/double
- * - boolean
- * - pyrobject
- * - char
- * - std::string
- * - void (raw) ptr
- */
 template<> inline void
 wsclang::write(pyrslot* s, int v) { SetInt(s, v); }
 
@@ -73,29 +63,27 @@ wsclang::write(pyrslot* s, std::string v)
     SetObject(s, str);
 }
 
-/* Pushes object 'T' to  object's instvar 'index' */
 template<typename T> inline void
-wsclang::write(pyrslot* s, T object, uint16_t index )
+wsclang::varwrite(pyrslot* s, T object, uint16_t index )
 {
     SetPtr(slotRawObject(s)->slots+index, object);
 }
 
 template<> inline void
-wsclang::write(pyrslot* s, int object, uint16_t index)
+wsclang::varwrite(pyrslot* s, int object, uint16_t index)
 {
     wsclang::write(slotRawObject(s)->slots+index, object);
 }
 
 template<> inline void
-wsclang::write(pyrslot* s, std::string object, uint16_t index)
+wsclang::varwrite(pyrslot* s, std::string object, uint16_t index)
 {
     auto str = newPyrString(gMainVMGlobals->gc, object.c_str(), 0, true);
     SetObject(slotRawObject(s)->slots+index, str);
 }
 
-/* Calls 'sym' sc-method, passing data as argument */
 template<typename T> void
-wsclang::return_data(pyrobject* object, T data, const char* sym)
+wsclang::interpret(pyrobject* object, T data, const char* sym)
 {
     gLangMutex.lock();
     if (compiledOK) {
@@ -109,9 +97,8 @@ wsclang::return_data(pyrobject* object, T data, const char* sym)
     gLangMutex.unlock();
 }
 
-/* Calls 'sym' sc-method, passing mutiple data as arguments */
 template<typename T> void
-wsclang::return_data(pyrobject* object, std::vector<T> data, const char* sym)
+wsclang::interpret(pyrobject* object, std::vector<T> data, const char* sym)
 {
     gLangMutex.lock();
     if (compiledOK) {
@@ -129,8 +116,6 @@ wsclang::return_data(pyrobject* object, std::vector<T> data, const char* sym)
     gLangMutex.unlock();
 }
 
-/* Frees object from standard heap and sclang's heap
- * sets objects to nil */
 template<typename T> inline void
 wsclang::free(pyrslot* s, T data)
 {
@@ -140,9 +125,7 @@ wsclang::free(pyrslot* s, T data)
 }
 
 #ifdef HAVE_AVAHI
-AvahiService::AvahiService(std::string name,
-                           std::string type,
-                           uint16_t port) :
+AvahiService::AvahiService(std::string name, std::string type, uint16_t port) :
     m_name(name),
     m_type(type),
     m_port(port)
@@ -200,9 +183,7 @@ void AvahiService::group_callback(avahi_entry_group *group,
     }
 }
 
-void AvahiService::client_callback(avahi_client *client,
-                                   avahi_client_state state,
-                                   void *udata)
+void AvahiService::client_callback(avahi_client *client, avahi_client_state state, void *udata)
 {
     auto svc = static_cast<AvahiService*>(udata);
     switch(state) {
@@ -247,8 +228,6 @@ void AvahiService::client_callback(avahi_client *client,
 }
 #endif // HAVE_AVAHI
 
-/* Initializes and runs websocket server, binding on <m_port>
- * starting dnssd as well (for now) */
 void Server::initialize()
 {
     mg_mgr_init(&m_mginterface, this);
@@ -282,14 +261,13 @@ Server::~Server()
     mg_mgr_free(&m_mginterface);
 }
 
-/* Redirects websocket frame to its proper sclang method (text/osc) */
 static void
 parse_websocket_frame(websocket_message* message, pyrobject* dest)
 {
     std::string wms(reinterpret_cast<const char*>(message->data), message->size);
 
     if (message->flags & WEBSOCKET_OP_TEXT) {
-        wsclang::return_data(dest, wms, "pvOnTextMessageReceived");
+        wsclang::interpret(dest, wms, "pvOnTextMessageReceived");
     }
     else if (message->flags & WEBSOCKET_OP_BINARY) {
         // might be OSC
@@ -300,11 +278,10 @@ parse_websocket_frame(websocket_message* message, pyrobject* dest)
         // we have to check for osc messages and bundles,
         // if not, transmit as raw binary data
         auto array = ConvertOSCMessage(message->size, data);
-        wsclang::return_data(dest, array, "pvOnOscMessageReceived");
+        wsclang::interpret(dest, array, "pvOnOscMessageReceived");
     }
 }
 
-/* Websocket event handling for <Server> objects */
 void Server::ws_event_handler(mg_connection* mgc, int event, void* data)
 {
     auto server = static_cast<Server*>(mgc->mgr->user_data);
@@ -315,8 +292,8 @@ void Server::ws_event_handler(mg_connection* mgc, int event, void* data)
         server->m_connections.push_back(c);
         // at this point, the pyrobject has not been set
         //it will have to go through the "bind" primitive call first
-        wsclang::return_data(server->object(), &server->m_connections.back(),
-                            "pvOnNewConnection");
+        wsclang::interpret(server->object(), &server->m_connections.back(),
+                           "pvOnNewConnection");
         break;
     }
     case MG_EV_WEBSOCKET_FRAME: {
@@ -332,8 +309,8 @@ void Server::ws_event_handler(mg_connection* mgc, int event, void* data)
     case MG_EV_HTTP_REQUEST: {
         http_message* hm = static_cast<http_message*>(data);
         auto req = new HttpRequest(mgc, hm);
-        wsclang::return_data(server->object(), req,
-                            "pvOnHttpRequestReceived");
+        wsclang::interpret(server->object(), req,
+                           "pvOnHttpRequestReceived");
         break;
     }
     case MG_EV_CLOSE: {
@@ -346,8 +323,8 @@ void Server::ws_event_handler(mg_connection* mgc, int event, void* data)
             for (auto& connection : server->m_connections) {
                 if (connection == mgc) {
                     to_remove = &connection;
-                    wsclang::return_data(server->object(), &connection,
-                                        "pvOnDisconnection");
+                    wsclang::interpret(server->object(), &connection,
+                                       "pvOnDisconnection");
                 }
             }
             if (to_remove)
@@ -366,9 +343,9 @@ void Client::connect(std::string host, uint16_t port)
     ws_addr.append(host);
     ws_addr.append(":");
     ws_addr.append(std::to_string(port));
-    m_connection.connection = mg_connect_ws(&m_ws_mgr, ws_event_handler, ws_addr.c_str(),
+    m_connection.mgc = mg_connect_ws(&m_ws_mgr, ws_event_handler, ws_addr.c_str(),
                                             nullptr, nullptr);
-    assert(m_connection.connection); //for now
+    assert(m_connection.mgc); //for now
     m_running = true;
     m_thread = std::thread(&Client::poll, this);
 }
@@ -392,7 +369,6 @@ Client::~Client()
     mg_mgr_free(&m_ws_mgr);
 }
 
-/* Websocket event handling for <Client> objects */
 void Client::ws_event_handler(mg_connection* mgc, int event, void* data)
 {
     auto client = static_cast<Client*>(mgc->mgr->user_data);
@@ -400,7 +376,7 @@ void Client::ws_event_handler(mg_connection* mgc, int event, void* data)
     case MG_EV_CONNECT: break;
     case MG_EV_POLL: break;
     case MG_EV_WEBSOCKET_HANDSHAKE_DONE: {
-         wsclang::return_data(client->object(), &client->m_connection,
+         wsclang::interpret(client->object(), &client->m_connection,
                             "pvOnConnected");
         break;
     }   
@@ -413,7 +389,7 @@ void Client::ws_event_handler(mg_connection* mgc, int event, void* data)
         http_message* reply = static_cast<http_message*>(data);        
         mgc->flags |= MG_F_CLOSE_IMMEDIATELY;
         auto req = new HttpRequest(mgc, reply);
-        wsclang::return_data(client->object(), req, "pvOnHttpReplyReceived");
+        wsclang::interpret(client->object(), req, "pvOnHttpReplyReceived");
         break;
     }
     case MG_EV_CLOSE: break;
@@ -427,90 +403,90 @@ void Client::poll()
     }
 }
 
-/* Binds <Connection> sclang object to its mg representation.
- * setting address/port instvars to be accessed from sclang */
+/// Binds <Connection> sclang object to its mg representation.
+/// setting address/port instvars to be accessed from sclang
 int
 pyr_ws_con_bind(vmglobals* g, int)
 {
-    auto nc = wsclang::read<Connection*>(g->sp, 0);
-    auto mgc = nc->connection;
+    auto nc = wsclang::varread<Connection*>(g->sp, 0);
+    auto mgc = nc->mgc;
     // write address/port in sc object
     char addr[32], s_port[8];
     mg_sock_addr_to_str(&mgc->sa, addr, sizeof(addr), MG_SOCK_STRINGIFY_IP);
     std::string saddr(addr, 32);
-    wsclang::write(g->sp, saddr, 1);
+    wsclang::varwrite(g->sp, saddr, 1);
 
     mg_sock_addr_to_str(&mgc->sa, s_port, sizeof(s_port), MG_SOCK_STRINGIFY_PORT);
     std::string strport(s_port, 8);
     int port = std::stoi(strport);
-    wsclang::write<int>(g->sp, port, 2);
+    wsclang::varwrite<int>(g->sp, port, 2);
 
     nc->set_object(slotRawObject(g->sp));
     return errNone;
 }
 
-/* Sends text message to <Connection> through websocket */
+/// Sends text message to <Connection> through websocket
 int
 pyr_ws_con_write_text(vmglobals* g, int)
 {
-    auto nc = wsclang::read<Connection*>(g->sp-1, 0);
+    auto nc = wsclang::varread<Connection*>(g->sp-1, 0);
     auto text = wsclang::read<std::string>(g->sp);    
-    mg_send_websocket_frame(nc->connection, WEBSOCKET_OP_TEXT,
+    mg_send_websocket_frame(nc->mgc, WEBSOCKET_OP_TEXT,
                             text.c_str(), text.size());
     return errNone;
 }
 
-/* Sends OSC message through websocket (binary opcode)
- * using the method from OSCData.cpp */
+/// Sends OSC message through websocket (binary opcode)
+/// using the method from OSCData.cpp
 int
 pyr_ws_con_write_osc(vmglobals* g, int n)
 {
     pyrslot* cslot = g->sp-n+1;
     pyrslot* aslot = cslot+1;
-    auto connection = wsclang::read<Connection*>(cslot, 0);
+    auto connection = wsclang::varread<Connection*>(cslot, 0);
 
     big_scpacket packet;
     int err = makeSynthMsgWithTags(&packet, aslot, n-1);
     if (err != errNone)
         return err;
-    mg_send_websocket_frame(connection->connection, WEBSOCKET_OP_BINARY,
+    mg_send_websocket_frame(connection->mgc, WEBSOCKET_OP_BINARY,
                             packet.data(), packet.size());
     return errNone;
 }
 
-/* Sends binary message through websocket
- * unimpleted yet. */
+/// Sends binary message through websocket.
+/// Unimpleted yet.
 int
 pyr_ws_con_write_binary(vmglobals* g, int)
 {
-    auto connection = wsclang::read<Connection*>(g->sp-1, 0);
+    auto connection = wsclang::varread<Connection*>(g->sp-1, 0);
     return errNone;
 }
 
-/* Creates <Client> object, returning it to sclang
- * for further manipulation */
+/// Creates <Client> object, returning it to sclang
+/// for further manipulation
 int
 pyr_ws_client_create(vmglobals* g, int)
 {    
     auto client = new Client;
     client->set_object(slotRawObject(g->sp));
-    wsclang::write(g->sp, client, 0);
+    wsclang::varwrite(g->sp, client, 0);
     return errNone;
 }
 
-/* Connects <Client> to host<string>:port<int>
- * note: should return error if failed */
+/// Connects <Client> to host<string>:port<int>
+/// note: should return error if failed
 int
 pyr_ws_client_connect(vmglobals* g, int)
 {
-    auto client = wsclang::read<Client*>(g->sp-2, 0);
+    auto client = wsclang::varread<Client*>(g->sp-2, 0);
     auto host = wsclang::read<std::string>(g->sp-1);
     auto port = wsclang::read<int>(g->sp);
     client->connect(host, port);
     return errNone;
 }
 
-/* Disconnects client from host. Unimplemented */
+/// Disconnects client from host. Unimplemented
 int
 pyr_ws_client_disconnect(vmglobals* g, int)
 {
@@ -521,54 +497,52 @@ pyr_ws_client_disconnect(vmglobals* g, int)
 int
 pyr_ws_client_free(vmglobals* g, int)
 {
-    auto client = wsclang::read<Client*>(g->sp, 0);
+    auto client = wsclang::varread<Client*>(g->sp, 0);
     wsclang::free(g->sp, client);
     return errNone;
 }
 
-/* Creates <Server>, running with dnssd <name>,
- * running on <port>, returns it to sclang */
+/// Creates <Server>, running on <port>, returns it to sclang.
 int
 pyr_ws_server_instantiate_run(vmglobals* g, int)
 {
     int port = wsclang::read<int>(g->sp);
     auto server = new Server(port);
     server->set_object(slotRawObject(g->sp-1));
-    wsclang::write(g->sp-1, server, 0);
+    wsclang::varwrite(g->sp-1, server, 0);
     return errNone;
 }
 
-/* Frees <Server> object from all heaps */
+/// Frees <Server> object from all heaps
 int
 pyr_ws_server_free(vmglobals* g, int)
 {
-    auto server = wsclang::read<Server*>(g->sp, 0);
+    auto server = wsclang::varread<Server*>(g->sp, 0);
     wsclang::free(g->sp, server);
     return errNone;
 }
 
-/* Loads contents of <HttpRequest> in the sclang object's
- *  instvariables */
+/// Loads contents of <HttpRequest> in the sclang object's
+/// instvariables
 int
 pyr_http_request_bind(vmglobals* g, int)
 {
-    auto req = wsclang::read<HttpRequest*>(g->sp, 0);
+    auto req = wsclang::varread<HttpRequest*>(g->sp, 0);
     auto hm = req->message;
     std::string method(hm->uri.p, hm->uri.len);
     std::string query(hm->query_string.p, hm->query_string.len);
 //    std::string mime; // todo
     std::string contents(hm->body.p, hm->body.len);
-    wsclang::write(g->sp, method, 1);
-    wsclang::write(g->sp, query, 2);
-    wsclang::write(g->sp, contents, 4);
+    wsclang::varwrite(g->sp, method, 1);
+    wsclang::varwrite(g->sp, query, 2);
+    wsclang::varwrite(g->sp, contents, 4);
     return errNone;
 }
 
-// from client
 int
 pyr_http_send_request(vmglobals* g, int)
 {    
-    auto client = wsclang::read<Client*>(g->sp-1, 0);
+    auto client = wsclang::varread<Client*>(g->sp-1, 0);
     auto req = wsclang::read<std::string>(g->sp);
     client->request(req);
     return errNone;
@@ -583,7 +557,7 @@ pyr_http_reply(vmglobals* g, int)
     if (!mime.empty())
         mime.insert(0, "Content-Type: ");
 
-    auto req = wsclang::read<HttpRequest*>(g->sp-3, 0);
+    auto req = wsclang::varread<HttpRequest*>(g->sp-3, 0);
     mg_send_head(req->connection, code, body.length(), mime.data());
     mg_printf(req->connection, "%.*s", (int) body.length(), body.data());
     return errNone;
@@ -598,7 +572,7 @@ pyr_zconf_add_service(vmglobals* g, int)
 #ifdef HAVE_AVAHI
     auto serv = new AvahiService(name, type, port);
 #endif
-    wsclang::write(g->sp-3, serv, 0);
+    wsclang::varwrite(g->sp-3, serv, 0);
     return errNone;
 }
 
@@ -606,7 +580,7 @@ int
 pyr_zconf_rem_service(vmglobals* g, int)
 {
 #ifdef HAVE_AVAHI
-    auto serv = wsclang::read<AvahiService*>(g->sp, 0);
+    auto serv = wsclang::varread<AvahiService*>(g->sp, 0);
 #endif
     wsclang::free(g->sp, serv);
     return errNone;

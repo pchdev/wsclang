@@ -13,6 +13,7 @@
 #include <avahi-common/timeval.h>
 #include <avahi-common/simple-watch.h>
 
+/// this is just some style whim..
 using avahi_client = AvahiClient;
 using avahi_simple_poll = AvahiSimplePoll;
 using avahi_entry_group = AvahiEntryGroup;
@@ -41,78 +42,76 @@ using pyrint8array = PyrInt8Array;
 
 namespace wsclang {
 
-/* Initializes http/websocket primitives */
+/// Initializes http/websocket primitives
 void initialize();
 
-/* Calls <sym> sc-method, passing data as argument */
+/// Calls <sym> sc-method, passing data as argument
 template<typename T> void
-return_data(pyrobject* object, T data, const char* sym);
+interpret(pyrobject* object, T data, const char* sym);
 
-/* Calls <sym> sc-method, passing mutiple data as arguments */
+/// Calls <sym> sc-method, passing mutiple data as arguments
 template<typename T> void
-return_data(pyrobject* object, std::vector<T>, const char* sym);
+interpret(pyrobject* object, std::vector<T>, const char* sym);
 
-/* Pushes object <T> to slot <s> */
+/// Pushes object <T> to slot <s>
 template<typename T> void
 write(pyrslot* s, T object);
 
-/* Pushes object <T> to  object's instvar at <index> */
+/// Pushes object <T> to  object's instvar at <index>
 template<typename T> void
-write(pyrslot* s, T object, uint16_t index);
+varwrite(pyrslot* s, T object, uint16_t index);
 
-/* reads object <T> from object's instvar at <index> */
+//// reads object <T> from object's instvar at <index>
 template<typename T> T
-read(pyrslot* s, uint16_t index);
+varread(pyrslot* s, uint16_t index);
 
-/* Reads object <T> from slot <s> */
+/// Reads object <T> from slot <s>
 template<typename T> T
 read(pyrslot* s);
 
-/* Frees object from slot and heap */
+/// Frees object from slot and heap
 template<typename T> void
 free(pyrslot* s, T object);
 
-/* Every wsclang class is going to have a pyrobject
- * reference for its sclang representation.
- * This is just for convenience */
+/// Every wsclang class is going to have a pyrobject
+/// reference for its sclang representation.
+//// This is just for convenience
 class Object
 {
     pyrobject* m_object = nullptr;
 
 public:
-    void set_object(pyrobject* object)
-    {
+    void set_object(pyrobject* object) {
         m_object = object;
     }
-    pyrobject* object()
-    {
+    pyrobject* object() {
         return m_object;
     }
 };
 
-/* Associates a sclang Connection pyrobject
- * with a mg_connection. This is primarily
- * used in order to lookup connections from one
- * end or the other */
+/// Associates a sclang Connection pyrobject
+/// with a mg_connection. This is primarily
+/// used in order to lookup connections from one
+/// end or the other.
 class Connection : public Object
 {
 public:
-    mg_connection* connection = nullptr;
+    mg_connection* mgc = nullptr;
 
-    Connection(mg_connection* mgc) :
-        connection(mgc) {}
+    Connection(mg_connection* cn) :
+        mgc(cn) {}
 
     bool operator==(Connection const& rhs) {
-        return connection == rhs.connection;
+        return mgc == rhs.mgc;
     }
 
     bool operator==(mg_connection* rhs) {
-        return connection == rhs;
+        return mgc == rhs;
     }
 };
 
-/* Associates mg http_message with a sclang object
- * and a mg_connection, for replying. */
+/// Associates mg http_message with a sclang object
+/// and a mg_connection, for replying.
 class HttpRequest : public Object
 {
 public:
@@ -136,31 +135,22 @@ class AvahiService
     bool m_running = false;
 
 public:
-    AvahiService(std::string name,
-                 std::string type,
-                 uint16_t port);
-
+    AvahiService(std::string name, std::string type, uint16_t port);
     ~AvahiService();
 
 private:
     void poll();
 
     static void
-    group_callback(avahi_entry_group* group,
-                   avahi_entry_group_state state,
-                   void* udata);
+    group_callback(avahi_entry_group* group, avahi_entry_group_state state, void* udata);
 
     static void
-    client_callback(avahi_client* client,
-                    avahi_client_state state,
-                    void* udata);
+    client_callback(avahi_client* client, avahi_client_state state, void* udata);
 };
 #endif
 
-/* A mg websocket server, embedding dnssd capabilities
- * (the two might be separated in the future). Storing
- * wsclang Connection objects to be retrieved and manipulated
- * through sclang */
+/// A mg websocket server. Storing wsclang Connection objects
+/// to be retrieved and manipulated through sclang
 class Server : public Object
 {
     mg_mgr m_mginterface;
@@ -174,30 +164,28 @@ public:
         initialize();
     }   
 
-    /* Initializes and runs websocket server, binding on <m_port>
-     * starting dnssd as well (for now) */
+    /// Initializes and runs websocket server, binding on <m_port>
     void initialize();
 
-    /* Starts mg/dnssd thread loops */
+    /// Starts mg thread loop
     void poll();
 
-    /* Mg websocket polling loop */
+    /// Mg websocket polling loop
     void mg_poll();
 
-    /* Joins mg/dnssd threads, frees its interfaces */
+    /// Joins mg/dnssd threads, frees its interfaces
     ~Server();
 
-    /* Websocket event handling for <Server> objects */
+    /// Websocket event handling for <Server> objects
     static void
     ws_event_handler(mg_connection* mgc, int event, void* data);
 
-    /* Removes connection from storage when disconnected */
-    void remove_connection(Connection const& con)
-    {
+    /// Removes connection from storage when disconnected
+    void
+    remove_connection(Connection const& con) {
         m_connections.erase(std::remove(m_connections.begin(),
                             m_connections.end(), con),
-                            m_connections.end());
-    }
+                            m_connections.end());}
 };
 
 class Client : public Object
