@@ -438,10 +438,7 @@ parse_websocket_frame(websocket_message* message, pyrobject* dest)
     else if (message->flags & WEBSOCKET_OP_BINARY) {
         // might be OSC
         auto data = reinterpret_cast<char*>(message->data);
-        // binary data starts at byte 4
-        // why.. header should've been removed at that point...??
-        // data += 4;
-        // we have to check for osc messages and bundles,
+        // TODO: we have to check for osc messages and bundles,
         // if not, transmit as raw binary data
         auto array = ConvertOSCMessage(message->size, data);
         wsclang::interpret(dest, array, "pvOnOscMessageReceived");
@@ -614,8 +611,10 @@ pyr_ws_con_write_osc(vmglobals* g, int n)
     int err = makeSynthMsgWithTags(&packet, aslot, n-1);
     if (err != errNone)
         return err;
+    // still don't know why there's a 4bits padding before the uri...
+    // this is a temporary workaround
     mg_send_websocket_frame(connection->mgc, WEBSOCKET_OP_BINARY,
-                            packet.data(), packet.size());
+                            packet.data()+4, packet.size());
     return errNone;
 }
 
