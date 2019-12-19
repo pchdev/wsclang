@@ -8,6 +8,10 @@ a tester repository for sclang websocket primitives proposal, using sc3.10 and m
 - cd into it
 - modify/run build.sh
 
+note: the script will clone, build and install a (slightly) modified version of SuperCollider. For convenience, we do not keep track of all recent sc updates and bugfixes, and only update the dependency occasionally. Keep in mind that your current (and probably newer) installation of SuperCollider will be overwritten.
+
+Furthermore, although we're focusing right now on Linux, we will do our best to test it and maintain it on macOS and Windows as well in the future.
+
 ## usage example
 
 ```js
