@@ -226,7 +226,7 @@ public:
 
     ~AvahiBrowser();
 
-    /// Called whenever a service has been resolved successfully
+    // Called whenever a service has been resolved successfully
     /// or timed out.
     static void
     resolve_cb(AvahiServiceResolver* r,

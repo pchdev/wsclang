@@ -159,6 +159,7 @@ WebSocketClient
 	pvOnHttpReplyReceived { |ptr|
 		var reply = HttpRequest.newFromPrimitive(ptr);
 		m_http_cb.value(reply);
+		reply.free();
 	}
 
 	writeText { |msg|
@@ -226,6 +227,11 @@ HttpRequest
 		// we assume code is 200 here
 		this.reply(200, json, "application/json");
 	}
+
+	free {
+		_HttpRequestFree
+		^this.primitiveFailed
+	}
 }
 
 WebSocketServer
@@ -292,6 +298,7 @@ WebSocketServer
 	pvOnHttpRequestReceived { |request|
 		var screq = HttpRequest.newFromPrimitive(request);
 		m_hcb.value(screq);
+		screq.free();
 	}
 
 	pvOnDisconnection { |cptr|

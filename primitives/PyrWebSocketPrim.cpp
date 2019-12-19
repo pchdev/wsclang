@@ -358,15 +358,12 @@ void AvahiService::client_cb(avahi_client *client, avahi_client_state state, voi
     case AVAHI_CLIENT_S_REGISTERING:
         break;
     case AVAHI_CLIENT_S_RUNNING: {
-        scpostn_av("client running");
         auto group = svc->m_group;
         if(!group) {
-            scpostn_av("creating entry group");
             group  = avahi_entry_group_new(client, group_cb, svc);
             svc->m_group = group;
         }        
         if (avahi_entry_group_is_empty(group)) {
-            scpostn_av("adding service");
             int err = avahi_entry_group_add_service(group,
                         AVAHI_IF_UNSPEC, AVAHI_PROTO_INET, static_cast<AvahiPublishFlags>(0),
                         svc->m_name.c_str(), svc->m_type.c_str(),
@@ -375,7 +372,6 @@ void AvahiService::client_cb(avahi_client *client, avahi_client_state state, voi
                  scpostn_av("failed to add service: %s", avahi_strerror(err));
                  return;
             }
-            scpostn_av("commiting service\n");
             if ((err = avahi_entry_group_commit(group))) {
                 scpostn_av("failed to commit group: %s", avahi_strerror(err));
                 return;
@@ -442,6 +438,8 @@ parse_websocket_frame(websocket_message* message, pyrobject* dest)
         // if not, transmit as raw binary data
         auto array = ConvertOSCMessage(message->size, data);
         wsclang::interpret(dest, array, "pvOnOscMessageReceived");
+    } else {
+        scpostn_mg("error, unknown websocket message type");
     }
 }
 
@@ -449,7 +447,9 @@ void Server::ws_event_handler(mg_connection* mgc, int event, void* data)
 {
     auto server = static_cast<Server*>(mgc->mgr->user_data);
     switch(event) {
-    case MG_EV_RECV: break;
+    case MG_EV_RECV: {
+        break;
+    }
     case MG_EV_WEBSOCKET_HANDSHAKE_DONE: {
         Connection c(mgc);
         server->m_connections.push_back(c);
@@ -593,6 +593,7 @@ pyr_ws_con_write_text(vmglobals* g, int)
 {
     auto nc = wsclang::varread<Connection*>(g->sp-1, 0);
     auto text = wsclang::read<std::string>(g->sp);    
+    scpostn_mg("websocket text out: %s", text.data());
     mg_send_websocket_frame(nc->mgc, WEBSOCKET_OP_TEXT,
                             text.c_str(), text.size());
     return errNone;
@@ -728,6 +729,14 @@ pyr_http_reply(vmglobals* g, int)
 }
 
 int
+pyr_http_request_free(vmglobals* g, int)
+{
+    auto rep = wsclang::varread<HttpRequest*>(g->sp, 0);
+    wsclang::free(g->sp, rep);
+    return errNone;
+}
+
+int
 pyr_zconf_add_service(vmglobals* g, int)
 {
     auto name = wsclang::read<std::string>(g->sp-2);
@@ -829,4 +838,5 @@ wsclang::initialize()
 
     WSCLANG_DECLPRIM("_HttpRequestBind", pyr_http_request_bind, 1, 0);
     WSCLANG_DECLPRIM("_HttpReply", pyr_http_reply, 4, 0);
+    WSCLANG_DECLPRIM("_HttpRequestFree", pyr_http_request_free, 1, 0);
 }
