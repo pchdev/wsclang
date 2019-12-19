@@ -1,6 +1,6 @@
 # wsclang
 
-a tester repository for sclang websocket primitives proposal, using sc3.10 and mongoose library at the moment
+A tester repository for a sclang websocket primitives proposal, using sc3.10 and mongoose library at the moment. This project was initially created as a replacement for the [libossia-supercollider](https://github.com/OSSIA/ossia-supercollider) bindings, and is currently used and developed in combination with @thibaudk's new [OSSIA quark](https://github.com/OSSIA/ossia-sclang) for supercollider.
 
 ## installing
 
@@ -8,7 +8,7 @@ a tester repository for sclang websocket primitives proposal, using sc3.10 and m
 - cd into it
 - modify/run build.sh
 
-note: the script will clone, build and install a (slightly) modified version of SuperCollider. For convenience, we do not keep track of all recent sc updates and bugfixes, and only update the dependency occasionally. Keep in mind that your current (and probably newer) installation of SuperCollider will be overwritten.
+***note:** the script will build and install a (slightly) modified version of SuperCollider. For convenience, we do not keep track of all recent sc updates and bugfixes, and only update the dependency occasionally. Keep in mind that your current (and probably newer) installation of SuperCollider will be overwritten*.
 
 Furthermore, although we're focusing right now on Linux, we will do our best to test it and maintain it on macOS and Windows as well in the future.
 
