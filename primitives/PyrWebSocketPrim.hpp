@@ -27,40 +27,40 @@ using pyrint8array = PyrInt8Array;
 
 namespace wsclang {
 
-/// Initializes http/websocket primitives
+/// Initializes http/websocket primitives.
 void initialize();
 
-/// Calls <sym> sc-method, passing data as argument
+/// Calls <sym> sc-method, passing data as argument.
 template<typename T> void
 interpret(pyrobject* object, T data, const char* sym);
 
-/// Calls <sym> sc-method, passing mutiple data as arguments
+/// Calls <sym> sc-method, passing mutiple data as arguments.
 template<typename T> void
 interpret(pyrobject* object, std::vector<T>, const char* sym);
 
-/// Pushes object <T> to slot <s>
+/// Pushes object <T> to slot <s>.
 template<typename T> void
 write(pyrslot* s, T object);
 
-/// Pushes object <T> to  object's instvar at <index>
+/// Pushes object <T> to  object's instvar at <index>.
 template<typename T> void
 varwrite(pyrslot* s, T object, uint16_t index);
 
-//// reads object <T> from object's instvar at <index>
+//// reads object <T> from object's instvar at <index>.
 template<typename T> T
 varread(pyrslot* s, uint16_t index);
 
-/// Reads object <T> from slot <s>
+/// Reads object <T> from slot <s>.
 template<typename T> T
 read(pyrslot* s);
 
-/// Frees object from slot and heap
+/// Frees object from slot and heap.
 template<typename T> void
 free(pyrslot* s, T object);
 
 /// Every wsclang class is going to have a pyrobject
 /// reference for its sclang representation.
-//// This is just for convenience
+/// This is just for convenience.
 class Object
 {
     pyrobject* m_object = nullptr;
@@ -108,7 +108,7 @@ public:
 };
 
 /// A mg websocket server. Storing wsclang Connection objects
-/// to be retrieved and manipulated through sclang
+/// to be retrieved and manipulated through sclang.
 class Server : public Object
 {
     mg_mgr m_mginterface;
@@ -122,23 +122,23 @@ public:
         initialize();
     }
 
-    /// Initializes and runs websocket server, binding on <m_port>
+    /// Initializes and runs websocket server, binding on <m_port>.
     void initialize();
 
-    /// Starts mg thread loop
+    /// Starts mg thread loop.
     void poll();
 
-    /// Mg websocket polling loop
+    /// Mg websocket polling loop.
     void mg_poll();
 
-    /// Joins mg/dnssd threads, frees its interfaces
+    /// Joins mg thread, frees its interfaces.
     ~Server();
 
-    /// Websocket event handling for <Server> objects
+    /// Websocket event handling for <Server> objects.
     static void
     ws_event_handler(mg_connection* mgc, int event, void* data);
 
-    /// Removes connection from storage when disconnected
+    /// Removes connection from storage when disconnected.
     void
     remove_connection(Connection const& con) {
         m_connections.erase(std::remove(m_connections.begin(),
@@ -214,7 +214,7 @@ public:
     }
 
     /// Initializes avahi client, poll and browser.
-    /// Called from both constructors
+    /// Called from both constructors.
     void initialize();
 
     void add_target(std::string target);

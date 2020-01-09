@@ -612,7 +612,7 @@ pyr_ws_con_write_osc(vmglobals* g, int n)
     int err = makeSynthMsgWithTags(&packet, aslot, n-1);
     if (err != errNone)
         return err;
-    // still don't know why there's a 4bits padding before the uri...
+    // still don't know why there's a 4bytes padding before the uri...
     // this is a temporary workaround
     mg_send_websocket_frame(connection->mgc, WEBSOCKET_OP_BINARY,
                             packet.data()+4, packet.size());

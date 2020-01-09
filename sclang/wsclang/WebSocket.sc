@@ -273,6 +273,10 @@ WebSocketServer
 		^m_connections[index];
 	}
 
+	numConnections {
+		^m_connections.size();
+	}
+
 	writeAll { |data|
 		m_connections.do(_.write(data));
 	}
