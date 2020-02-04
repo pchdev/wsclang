@@ -60,8 +60,18 @@ w.onHttpRequestReceived = { |req|
 "http://localhost:5678/?HOST_INFO".openOS();
 
 (
-b = ZeroconfBrowser("_oscjson._tcp", "supercollider");
+
 c = WebSocketClient();
+b = ZeroconfBrowser("_oscjson._tcp", "supercollider", { |target|
+	postln(format("[zeroconf] target resolved: % (%) at address: %:%",
+		target.name, target.domain, target.address, target.port));
+	target.onDisconnected = {
+		postln(format("[zeroconf] target % is now offline", target.name));
+	};
+	// when our target 'supercollider' (our websocket server) is online and resolved
+	// through zeroconf, automatically connect the client to it from its address and port.
+	c.connect(target.address, target.port)
+});
 
 c.onConnected = {
 	// client connection callback
@@ -82,17 +92,6 @@ c.onTextMessageReceived = { |msg|
 
 c.onOscMessageReceived = { |msg|
 	postln(format("[websocket-client] osc message from server: %", msg));
-};
-
-b.onTargetResolved = { |target|
-	postln(format("[zeroconf] target resolved: % (%) at address: %:%",
-		          target.name, target.domain, target.address, target.port));
-	target.onDisconnected = {
-		postln(format("[zeroconf] target % is now offline", target.name));
-	};
-	// when our target 'supercollider' (our websocket server) is online and resolved
-	// through zeroconf, automatically connect the client to it from its address and port.
-	c.connect(target.address, target.port)
 };
 
 )

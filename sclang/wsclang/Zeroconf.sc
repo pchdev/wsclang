@@ -27,8 +27,8 @@ ZeroconfBrowser
 		})
 	}
 
-	*new { |type, target = ""|
-		^this.newCopyArgs(0x0, type).zCtor(target)
+	*new { |type, target = "", onTargetResolved|
+		^this.newCopyArgs(0x0, type, onTargetResolved).zCtor(target)
 	}
 
 	*newMonitor { |type|
@@ -38,7 +38,9 @@ ZeroconfBrowser
 		m_targets = [];
 		g_instances = g_instances.add(this);
 		this.prmCreate(m_type);
-		this.addTarget(target);
+		if (target.notEmpty()) {
+			this.addTarget(target);
+		}
 	}
 
 	prmCreate { |type|
