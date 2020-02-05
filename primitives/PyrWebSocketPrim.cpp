@@ -722,9 +722,10 @@ pyr_http_reply(vmglobals* g, int)
     if (!mime.empty())
         mime.insert(0, "Content-Type: ");
 
-    auto req = wsclang::varread<HttpRequest*>(g->sp-3, 0);
+    auto req = wsclang::varread<HttpRequest*>(g->sp-3, 0);    
+    req->connection->flags |= MG_F_SEND_AND_CLOSE;
     mg_send_head(req->connection, code, body.length(), mime.data());
-    mg_printf(req->connection, "%.*s", (int) body.length(), body.data());
+    mg_printf(req->connection, "%.*s", (int) body.length(), body.data());    
     return errNone;
 }
 

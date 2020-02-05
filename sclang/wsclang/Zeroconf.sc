@@ -7,7 +7,7 @@ ZeroconfTarget
 	var <>onDisconnected;
 
 	*new { |name, domain, address, port|
-		^this.newCopyArgs(name, domain, address, port, true)
+		^this.newCopyArgs(name, domain, address, port, nil)
 	}
 }
 
