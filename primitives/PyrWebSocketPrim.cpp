@@ -190,7 +190,7 @@ AvahiBrowser::poll()
 void
 AvahiBrowser::add_target(std::string target)
 {
-    m_targets.push_back(target);
+    m_targets.push_back({target, false});
 }
 
 void
@@ -223,12 +223,17 @@ AvahiBrowser::resolve_cb(AvahiServiceResolver* r,
     }
     case AVAHI_RESOLVER_FOUND: {
         char addr[AVAHI_ADDRESS_STR_MAX], pstr[5];
+        auto avb = static_cast<AvahiBrowser*>(udt);
+        avahi_target* ptr(nullptr);
+        for (auto& target : avb->m_targets)
+            if (target.name == name)
+                ptr = &target;
         avahi_address_snprint(addr, AVAHI_ADDRESS_STR_MAX, address);
         sprintf(pstr, "%d", port);
         scpostn_av("service resolved: %s (%s), "
                    "address: %s, port: %s", name, domain, addr, pstr);
         // return data to sclang as an array (for now)
-        auto avb = static_cast<AvahiBrowser*>(udt);
+        ptr->resolved = true;
         std::vector<std::string> ret = { name, domain, addr, pstr };
         wsclang::interpret<std::string>(avb->object(), ret, "pvOnTargetResolved");
         break;
@@ -257,7 +262,8 @@ AvahiBrowser::browser_cb(avahi_service_browser* browser,
     case AVAHI_BROWSER_NEW: {
         scpostn_av("service detected: %s (%s)", name, domain);
         for (const auto& target : avb->m_targets) {
-            if (name == target) {
+            // filter out already resolved target (multiple ip bug)
+            if (name == target.name && !target.resolved) {
                 if ((avahi_service_resolver_new(
                          avb->m_client,  interface, protocol,
                          name, type, domain, AVAHI_PROTO_INET,
@@ -269,9 +275,12 @@ AvahiBrowser::browser_cb(avahi_service_browser* browser,
         break;
     }
     case AVAHI_BROWSER_REMOVE: {
-        for (const auto& target : avb->m_targets)
-             if (name == target)
-                 wsclang::interpret(avb->object(), target, "pvOnTargetRemoved");
+        for (auto& target : avb->m_targets)
+             if (name == target.name) {
+                 target.resolved = false;
+                 wsclang::interpret(avb->object(), target.name,
+                                    "pvOnTargetRemoved");
+             }
         break;
     }
     case AVAHI_BROWSER_ALL_FOR_NOW:

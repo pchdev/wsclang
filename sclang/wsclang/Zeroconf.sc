@@ -62,23 +62,12 @@ ZeroconfBrowser
 		^m_targets[index];
 	}
 
-	pvAddResolvedTarget { |name, domain, address, port|
+	pvOnTargetResolved { |name, domain, address, port|
 		var target = ZeroconfTarget(name, domain, address, port.asInteger);
 		if (onTargetResolved.notNil()) {
 			onTargetResolved.value(target);
 		};
 		m_targets = m_targets.add(target);
-	}
-
-	pvOnTargetResolved { |name, domain, address, port|
-		m_targets.do({|target|
-			if ((target.name == name) &&
-				(target.domain == domain) &&
-				(target.port == port)) {
-				^this;
-			}
-		});
-		^this.pvAddResolvedTarget(name, domain, address, port);
 	}
 
 	pvOnTargetRemoved { |name|

@@ -193,13 +193,22 @@ using avahi_entry_group_state   = AvahiEntryGroupState;
 using avahi_client_state        = AvahiClientState;
 using avahi_service_browser     = AvahiServiceBrowser;
 
+struct avahi_target {
+    std::string name;
+    bool resolved;
+
+    bool operator==(std::string const& rhs) {
+        return name == rhs;
+    }
+};
+
 class AvahiBrowser : public Object
 {
     avahi_client* m_client = nullptr;
     avahi_simple_poll* m_poll = nullptr;
     avahi_service_browser* m_browser = nullptr;
     std::string m_type;
-    std::vector<std::string> m_targets;
+    std::vector<avahi_target> m_targets;
     std::thread m_thread;
     bool m_running = false;
 

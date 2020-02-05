@@ -17,7 +17,6 @@ w.onNewConnection = { |con|
 		// echo back the received message to the client
 		con.writeText(msg);
 	};
-
 	con.onOscMessageReceived = { |array|
 		// this is OSC over websocket, convenient for critical message reception
 		// the array is of the same format as a standard OSC array sent from a NetAddr
@@ -36,14 +35,12 @@ w.onHttpRequestReceived = { |req|
 	// the websocket server keeps its http-server functionalities
 	// meaning it can receive standard non-websocket http requests from browsers or other http clients
 	// here, we set the callback for passing these HttpRequest objects
-
 	postln("[http-server] request received");
 	postln(format("[http-server] uri: %", req.uri));
 
 	if (req.query.isEmpty().not()) {
 		postln(format("[http-server] query: %", req.query));
 	};
-
 	if (req.uri == "/") {
 		if (req.query == "HOST_INFO") {
 			// another oscquery example
