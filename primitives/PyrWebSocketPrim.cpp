@@ -82,6 +82,21 @@ wsclang::varwrite(pyrslot* s, std::string object, uint16_t index)
     SetObject(slotRawObject(s)->slots+index, str);
 }
 
+void
+wsclang::interpret(pyrobject* object, const char* sym)
+{
+    gLangMutex.lock();
+    if (compiledOK) {
+        auto g = gMainVMGlobals;
+        g->canCallOS = true;
+        ++g->sp; wsclang::write<pyrobject*>(g->sp, object);
+        runInterpreter(g, getsym(sym), 1);
+        g->canCallOS = false;
+    }
+    gLangMutex.unlock();
+}
+
+
 template<typename T> void
 wsclang::interpret(pyrobject* object, T data, const char* sym)
 {
@@ -230,11 +245,10 @@ AvahiBrowser::resolve_cb(AvahiServiceResolver* r,
                 ptr = &target;
         avahi_address_snprint(addr, AVAHI_ADDRESS_STR_MAX, address);
         sprintf(pstr, "%d", port);
-        scpostn_av("service resolved: %s (%s), "
-                   "address: %s, port: %s", name, domain, addr, pstr);
+        scpostn_av("service resolved: %s (%s, %s), "
+                   "address: %s, port: %s", name, host_name, domain, addr, pstr);
         // return data to sclang as an array (for now)
-        ptr->resolved = true;
-        std::vector<std::string> ret = { name, domain, addr, pstr };
+        std::vector<std::string> ret = { name, host_name, domain, addr, pstr };
         wsclang::interpret<std::string>(avb->object(), ret, "pvOnTargetResolved");
         break;
     }
@@ -261,7 +275,7 @@ AvahiBrowser::browser_cb(avahi_service_browser* browser,
     }
     case AVAHI_BROWSER_NEW: {
         scpostn_av("service detected: %s (%s)", name, domain);
-        for (const auto& target : avb->m_targets) {
+        for (auto& target : avb->m_targets) {
             // filter out already resolved target (multiple ip bug)
             if (name == target.name && !target.resolved) {
                 if ((avahi_service_resolver_new(
@@ -269,7 +283,11 @@ AvahiBrowser::browser_cb(avahi_service_browser* browser,
                          name, type, domain, AVAHI_PROTO_INET,
                          (AvahiLookupFlags) 0, resolve_cb, avb)) == nullptr) {
                     scpostn_av("failed to resolve target %s");
+                } else {
+                    target.resolved = true;
                 }
+            } else if (name == target.name && target.resolved) {
+                scpostn_av("duplicate service");
             }
         }
         break;
@@ -416,7 +434,6 @@ void Server::initialize()
     m_mgthread = std::thread(&Server::mg_poll, this);
 }
 
-
 void Server::mg_poll()
 {
     while (m_running)
@@ -507,11 +524,20 @@ void Server::ws_event_handler(mg_connection* mgc, int event, void* data)
     }
 }
 
+Client::~Client()
+{
+    disconnect();
+}
+
 void Client::connect(std::string host, uint16_t port)
 {
-    m_host = host;
-    m_port = port;
+    if (m_running) {
+        disconnect();
+    }
     std::string ws_addr("ws://");
+    mg_mgr_init(&m_ws_mgr, this);
+    m_host = host;
+    m_port = port;    
     ws_addr.append(host);
     ws_addr.append(":");
     ws_addr.append(std::to_string(port));
@@ -522,8 +548,26 @@ void Client::connect(std::string host, uint16_t port)
     m_thread = std::thread(&Client::poll, this);
 }
 
+void Client::disconnect()
+{
+    if (m_running) {
+        m_running = false;
+        assert(m_thread.joinable());
+        m_thread.join();
+        // right now, this seems to be the preferred way to disconnect..
+        mg_mgr_free(&m_ws_mgr);
+        memset(&m_ws_mgr, 0, sizeof(mg_mgr));
+    } else {
+        scpostn_mg("warning: client not connected/running");
+    }
+}
+
 void Client::request(std::string req)
 {
+    if (!m_running) {
+        scpostn_mg("error: client is not connected/running");
+        return;
+    }
     std::string addr(m_host);
     addr.append(":");
     addr.append(std::to_string(m_port));
@@ -532,12 +576,11 @@ void Client::request(std::string req)
                                nullptr, nullptr);
 }
 
-Client::~Client()
+void Client::poll()
 {
-    m_running = false;
-    assert(m_thread.joinable());
-    m_thread.join();
-    mg_mgr_free(&m_ws_mgr);
+    while (m_running) {
+          mg_mgr_poll(&m_ws_mgr, 200);
+    }
 }
 
 void Client::ws_event_handler(mg_connection* mgc, int event, void* data)
@@ -563,14 +606,12 @@ void Client::ws_event_handler(mg_connection* mgc, int event, void* data)
         wsclang::interpret(client->object(), req, "pvOnHttpReplyReceived");
         break;
     }
-    case MG_EV_CLOSE: break;
+    case MG_EV_CLOSE: {
+        if (client->m_running && mgc->flags & MG_F_IS_WEBSOCKET) {
+            client->m_connection.mgc = nullptr;
+            wsclang::interpret(client->object(), "pvOnDisconnected");
+        }
     }
-}
-
-void Client::poll()
-{
-    while (m_running) {
-          mg_mgr_poll(&m_ws_mgr, 200);
     }
 }
 
@@ -580,18 +621,14 @@ int
 pyr_ws_con_bind(vmglobals* g, int)
 {
     auto nc = wsclang::varread<Connection*>(g->sp, 0);
-    auto mgc = nc->mgc;
     // write address/port in sc object
-    char addr[32], s_port[8];
-    mg_sock_addr_to_str(&mgc->sa, addr, sizeof(addr), MG_SOCK_STRINGIFY_IP);
-    std::string saddr(addr, 32);
-    wsclang::varwrite(g->sp, saddr, 1);
-
-    mg_sock_addr_to_str(&mgc->sa, s_port, sizeof(s_port), MG_SOCK_STRINGIFY_PORT);
-    std::string strport(s_port, 8);
-    int port = std::stoi(strport);
+    int port;
+    char addr[32], s_port[8];    
+    mg_sock_addr_to_str(&nc->mgc->sa, addr, sizeof(addr), MG_SOCK_STRINGIFY_IP);
+    mg_sock_addr_to_str(&nc->mgc->sa, s_port, sizeof(s_port), MG_SOCK_STRINGIFY_PORT);
+    port = std::stoi(s_port);
+    wsclang::varwrite(g->sp, std::string(addr), 1);
     wsclang::varwrite<int>(g->sp, port, 2);
-
     nc->set_object(slotRawObject(g->sp));
     return errNone;
 }
@@ -616,7 +653,6 @@ pyr_ws_con_write_osc(vmglobals* g, int n)
     pyrslot* cslot = g->sp-n+1;
     pyrslot* aslot = cslot+1;
     auto connection = wsclang::varread<Connection*>(cslot, 0);
-
     big_scpacket packet;
     int err = makeSynthMsgWithTags(&packet, aslot, n-1);
     if (err != errNone)
@@ -664,6 +700,8 @@ pyr_ws_client_connect(vmglobals* g, int)
 int
 pyr_ws_client_disconnect(vmglobals* g, int)
 {
+    auto client = wsclang::varread<Client*>(g->sp, 0);
+    client->disconnect();
     return errNone;
 }
 

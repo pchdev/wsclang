@@ -57,11 +57,8 @@ w.onHttpRequestReceived = { |req|
 "http://localhost:5678/?HOST_INFO".openOS();
 
 (
-
 c = WebSocketClient();
 b = ZeroconfBrowser("_oscjson._tcp", "supercollider", { |target|
-	postln(format("[zeroconf] target resolved: % (%) at address: %:%",
-		target.name, target.domain, target.address, target.port));
 	target.onDisconnected = {
 		postln(format("[zeroconf] target % is now offline", target.name));
 	};
@@ -79,6 +76,10 @@ c.onConnected = {
 	c.request("/");
 };
 
+c.onDisconnected = {
+	postln("[websocket-client] disconnected");
+};
+
 c.onHttpReplyReceived = { |reply|
 	postln(format("[http-client] reply from server for uri: %, %", reply.uri, reply.body));
 };
@@ -90,8 +91,10 @@ c.onTextMessageReceived = { |msg|
 c.onOscMessageReceived = { |msg|
 	postln(format("[websocket-client] osc message from server: %", msg));
 };
-
 )
 
 c.writeText("owls are not what they seem");
 c.writeOsc('/world', 32004, 32.4343, "hellooo");
+
+c.disconnect();
+c.connect("127.0.0.1", 5678);

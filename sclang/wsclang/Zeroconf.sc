@@ -1,13 +1,14 @@
 ZeroconfTarget
 {
 	var <name;
+	var <host;
 	var <domain;
 	var <address;
 	var <port;
 	var <>onDisconnected;
 
-	*new { |name, domain, address, port|
-		^this.newCopyArgs(name, domain, address, port, nil)
+	*new { |name, host, domain, address, port|
+		^this.newCopyArgs(name, host, domain, address, port, nil)
 	}
 }
 
@@ -62,8 +63,8 @@ ZeroconfBrowser
 		^m_targets[index];
 	}
 
-	pvOnTargetResolved { |name, domain, address, port|
-		var target = ZeroconfTarget(name, domain, address, port.asInteger);
+	pvOnTargetResolved { |name, host, domain, address, port|
+		var target = ZeroconfTarget(name, host, domain, address, port.asInteger);
 		if (onTargetResolved.notNil()) {
 			onTargetResolved.value(target);
 		};

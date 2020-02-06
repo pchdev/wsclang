@@ -110,12 +110,14 @@ WebSocketClient
 		^this.primitiveFailed
 	}
 
-	zconnect { |zc_name| // zeroconf connection
-		_WebSocketClientZConnect
-		^this.primitiveFailed
+	disconnect {
+		this.primDisconnect();
+		if (m_dcb.notNil()) {
+			m_dcb.value();
+		}
 	}
 
-	disconnect {
+	primDisconnect {
 		_WebSocketClientDisconnect
 		^this.primitiveFailed
 	}
@@ -137,7 +139,6 @@ WebSocketClient
 	pvOnDisconnected {
 		connected = false;
 		m_dcb.value();
-		m_connection = nil;
 	}
 
 	onTextMessageReceived_ { |callback|

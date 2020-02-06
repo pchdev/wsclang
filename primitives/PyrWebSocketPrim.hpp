@@ -11,6 +11,7 @@
 #include "scsynthsend.h"
 #include <iostream>
 #include <thread>
+#include <atomic>
 
 #include "../dependencies/mongoose/mongoose.h"
 
@@ -29,6 +30,9 @@ namespace wsclang {
 
 /// Initializes http/websocket primitives.
 void initialize();
+
+void
+interpret(pyrobject* object, const char* sym);
 
 /// Calls <sym> sc-method, passing data as argument.
 template<typename T> void
@@ -114,8 +118,8 @@ class Server : public Object
     mg_mgr m_mginterface;
     std::vector<Connection> m_connections;
     std::thread m_mgthread;
+    std::atomic_bool m_running {false};
     uint16_t m_port = 5678;
-    bool m_running = false;
 
 public:
     Server(uint16_t port) : m_port(port) {
@@ -152,17 +156,15 @@ class Client : public Object
     std::thread m_thread;
     mg_mgr m_ws_mgr;
     std::string m_host;
+    std::atomic_bool m_running {false};
     uint16_t m_port = 0;
-    bool m_running = false;
 
 public:
-    Client() : m_connection(nullptr) {
-        mg_mgr_init(&m_ws_mgr, this);
-    }
-
+    Client() : m_connection(nullptr) {}
     ~Client();
 
     void connect(std::string host, uint16_t port);
+    void disconnect();
     void request(std::string req);
     void poll();
 
@@ -211,6 +213,7 @@ class AvahiBrowser : public Object
     std::vector<avahi_target> m_targets;
     std::thread m_thread;
     bool m_running = false;
+    bool m_monitor = false;
 
 public:
 
