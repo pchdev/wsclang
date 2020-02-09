@@ -1,3 +1,6 @@
+
+WebSocket.granularity = 50;
+
 (
 w = WebSocketServer(5678);
 z = ZeroconfService("supercollider", "_oscjson._tcp", w.port);
@@ -94,7 +97,4 @@ c.onOscMessageReceived = { |msg|
 )
 
 c.writeText("owls are not what they seem");
-c.writeOsc('/world', 32004, 32.4343, "hellooo");
-
-c.disconnect();
-c.connect("127.0.0.1", 5678);
+c.writeOsc("/world", 32004, 32.4343, "hellooo");

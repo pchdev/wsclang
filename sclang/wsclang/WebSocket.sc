@@ -1,3 +1,20 @@
+WebSocket {
+
+	classvar m_granularity;
+
+	*initClass {
+		m_granularity = 200;
+	}
+
+	*granularity { ^m_granularity }
+
+	*granularity_ { |gran|
+		var server_instances;
+		var client_instances;
+		m_granularity = gran;
+	}
+}
+
 WebSocketConnection
 {
 	var m_ptr;
@@ -91,8 +108,12 @@ WebSocketClient
 	}
 
 	*new {
-		^super.new.wsClientCtor().primCreate();
+		^super.new.wsClientCtor()
+		.primCreate()
+		.granularity_(WebSocket.granularity());
 	}
+
+	*instances { ^this.g_instances }
 
 	wsClientCtor {
 		connected = false;
@@ -115,6 +136,11 @@ WebSocketClient
 		if (m_dcb.notNil()) {
 			m_dcb.value();
 		}
+	}
+
+	granularity_ { |milliseconds|
+		_WebSocketClientSetGranularity
+		^this.primitiveFailed
 	}
 
 	primDisconnect {
@@ -261,10 +287,16 @@ WebSocketServer
 		m_connections = [];
 		g_instances = g_instances.add(this);
 		this.prmInstantiateRun(m_port);
+		this.granularity = WebSocket.granularity();
 	}
 
 	prmInstantiateRun { |port|
 		_WebSocketServerInstantiateRun
+		^this.primitiveFailed
+	}
+
+	granularity_ { |milliseconds|
+		_WebSocketServerSetGranularity
 		^this.primitiveFailed
 	}
 

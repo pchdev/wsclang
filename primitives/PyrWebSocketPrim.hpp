@@ -111,31 +111,37 @@ public:
         connection(con), message(msg) {}
 };
 
-/// A mg websocket server. Storing wsclang Connection objects
-/// to be retrieved and manipulated through sclang.
-class Server : public Object
-{
+class WSObject : public Object {
+protected:
     mg_mgr m_mginterface;
-    std::vector<Connection> m_connections;
     std::thread m_mgthread;
     std::atomic_bool m_running {false};
-    uint16_t m_port = 5678;
+    std::atomic_uint16_t m_granularity {200};
+    uint16_t m_port;
+public:
+    void set_granularity(uint16_t granularity) {
+        scpostn_mg("setting granularity to: %d", granularity);
+        m_granularity = granularity;
+    }
+    uint16_t granularity() const {
+        return m_granularity;
+    }
+};
+
+/// A mg websocket server. Storing wsclang Connection objects
+/// to be retrieved and manipulated through sclang.
+class Server : public WSObject
+{
+    std::vector<Connection> m_connections;
 
 public:
-    Server(uint16_t port) : m_port(port) {
+    Server(uint16_t port) {
+        m_port = port;
         initialize();
     }
 
-    /// Initializes and runs websocket server, binding on <m_port>.
     void initialize();
-
-    /// Starts mg thread loop.
     void poll();
-
-    /// Mg websocket polling loop.
-    void mg_poll();
-
-    /// Joins mg thread, frees its interfaces.
     ~Server();
 
     /// Websocket event handling for <Server> objects.
@@ -150,23 +156,20 @@ public:
                             m_connections.end());}
 };
 
-class Client : public Object
+class Client : public WSObject
 {
     Connection m_connection;
     std::thread m_thread;
-    mg_mgr m_ws_mgr;
     std::string m_host;
-    std::atomic_bool m_running {false};
-    uint16_t m_port = 0;
 
 public:
     Client() : m_connection(nullptr) {}
     ~Client();
 
-    void connect(std::string host, uint16_t port);
-    void disconnect();
-    void request(std::string req);
+    void connect(std::string const& host, uint16_t port);
+    void request(std::string const& req);
     void poll();
+    void disconnect();
 
     static void
     ws_event_handler(mg_connection* mgc, int event, void* data);

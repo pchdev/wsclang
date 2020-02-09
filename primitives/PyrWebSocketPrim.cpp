@@ -431,13 +431,13 @@ void Server::initialize()
     }
     mg_set_protocol_http_websocket(connection);
     m_running = true;
-    m_mgthread = std::thread(&Server::mg_poll, this);
+    m_mgthread = std::thread(&Server::poll, this);
 }
 
-void Server::mg_poll()
+void Server::poll()
 {
     while (m_running)
-        mg_mgr_poll(&m_mginterface, 200);
+        mg_mgr_poll(&m_mginterface, m_granularity);
 }
 
 Server::~Server()
@@ -529,20 +529,20 @@ Client::~Client()
     disconnect();
 }
 
-void Client::connect(std::string host, uint16_t port)
+void Client::connect(std::string const& host, uint16_t port)
 {
     if (m_running) {
         disconnect();
     }
     std::string ws_addr("ws://");
-    mg_mgr_init(&m_ws_mgr, this);
+    mg_mgr_init(&m_mginterface, this);
     m_host = host;
     m_port = port;    
     ws_addr.append(host);
     ws_addr.append(":");
     ws_addr.append(std::to_string(port));
-    m_connection.mgc = mg_connect_ws(&m_ws_mgr, ws_event_handler, ws_addr.c_str(),
-                                     nullptr, nullptr);
+    m_connection.mgc = mg_connect_ws(&m_mginterface, ws_event_handler,
+                           ws_addr.c_str(), nullptr, nullptr);
     assert(m_connection.mgc); //for now
     m_running = true;
     m_thread = std::thread(&Client::poll, this);
@@ -555,14 +555,14 @@ void Client::disconnect()
         assert(m_thread.joinable());
         m_thread.join();
         // right now, this seems to be the preferred way to disconnect..
-        mg_mgr_free(&m_ws_mgr);
-        memset(&m_ws_mgr, 0, sizeof(mg_mgr));
+        mg_mgr_free(&m_mginterface);
+        memset(&m_mginterface, 0, sizeof(mg_mgr));
     } else {
         scpostn_mg("warning: client not connected/running");
     }
 }
 
-void Client::request(std::string req)
+void Client::request(std::string const& req)
 {
     if (!m_running) {
         scpostn_mg("error: client is not connected/running");
@@ -572,14 +572,14 @@ void Client::request(std::string req)
     addr.append(":");
     addr.append(std::to_string(m_port));
     addr.append(req);
-    auto mgc = mg_connect_http(&m_ws_mgr, ws_event_handler, addr.data(),
+    auto mgc = mg_connect_http(&m_mginterface, ws_event_handler, addr.data(),
                                nullptr, nullptr);
 }
 
 void Client::poll()
 {
     while (m_running) {
-          mg_mgr_poll(&m_ws_mgr, 200);
+          mg_mgr_poll(&m_mginterface, m_granularity);
     }
 }
 
@@ -705,6 +705,15 @@ pyr_ws_client_disconnect(vmglobals* g, int)
     return errNone;
 }
 
+int
+pyr_ws_client_set_granularity(vmglobals* g, int)
+{
+    auto client = wsclang::varread<Client*>(g->sp-1, 0);
+    auto granularity = wsclang::read<int>(g->sp);
+    client->set_granularity(granularity);
+    return errNone;
+}
+
 /* Frees <Client> object from all heaps */
 int
 pyr_ws_client_free(vmglobals* g, int)
@@ -722,6 +731,15 @@ pyr_ws_server_instantiate_run(vmglobals* g, int)
     auto server = new Server(port);
     server->set_object(slotRawObject(g->sp-1));
     wsclang::varwrite(g->sp-1, server, 0);
+    return errNone;
+}
+
+int
+pyr_ws_server_set_granularity(vmglobals* g, int)
+{
+    auto server = wsclang::varread<Server*>(g->sp-1, 0);
+    auto granularity = wsclang::read<int>(g->sp);
+    server->set_granularity(granularity);
     return errNone;
 }
 
@@ -870,10 +888,12 @@ wsclang::initialize()
     WSCLANG_DECLPRIM("_WebSocketClientCreate", pyr_ws_client_create, 1, 0);
     WSCLANG_DECLPRIM("_WebSocketClientConnect", pyr_ws_client_connect, 3, 0);
     WSCLANG_DECLPRIM("_WebSocketClientDisconnect", pyr_ws_client_disconnect, 1, 0);
+    WSCLANG_DECLPRIM("_WebSocketClientSetGranularity", pyr_ws_client_set_granularity, 2, 0);
     WSCLANG_DECLPRIM("_WebSocketClientRequest", pyr_http_send_request, 2, 0);
     WSCLANG_DECLPRIM("_WebSocketClientFree", pyr_ws_client_free, 1, 0);
 
     WSCLANG_DECLPRIM("_WebSocketServerInstantiateRun", pyr_ws_server_instantiate_run, 2, 0);
+    WSCLANG_DECLPRIM("_WebSocketServerSetGranularity", pyr_ws_server_set_granularity, 2, 0);
     WSCLANG_DECLPRIM("_WebSocketServerFree", pyr_ws_server_free, 1, 0);
 
     WSCLANG_DECLPRIM("_ZeroconfBrowserCreate", pyr_zconf_browser_create, 2, 0);
