@@ -53,7 +53,6 @@ w.onHttpRequestReceived = { |req|
 	// the websocket server keeps its http-server functionalities
 	// meaning it can receive standard non-websocket http requests from browsers or other http clients
 	// here, we set the callback for passing these HttpRequest objects
-
 	postln("[http-server] request received");
 	postln(format("[http-server] uri: %", req.uri));
 
@@ -114,5 +113,6 @@ c.onOscMessageReceived = { |msg|
 
 c.writeText("owls are not what they seem");
 c.writeOsc('/world', 32004, 32.4343, "hellooo");
+w[0].writeOsc("/world", 32001, 32.66, "two coopers");
 
 ```
