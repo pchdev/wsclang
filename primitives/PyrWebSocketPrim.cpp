@@ -654,13 +654,21 @@ pyr_ws_con_write_osc(vmglobals* g, int n)
     pyrslot* aslot = cslot+1;
     auto connection = wsclang::varread<Connection*>(cslot, 0);
     big_scpacket packet;
-    int err = makeSynthMsgWithTags(&packet, aslot, n-1);
+    pyrobject* obj = slotRawObject(aslot);
+
+    if (isKindOf(obj, class_array)) {
+        aslot = obj->slots;
+        n = obj->size;
+    } else {
+        n--;
+    }
+    int err = makeSynthMsgWithTags(&packet, aslot, n);
     if (err != errNone)
         return err;
     // still don't know why there's a 4bytes padding before the uri...
     // this is a temporary workaround
     mg_send_websocket_frame(connection->mgc, WEBSOCKET_OP_BINARY,
-                            packet.data()+4, packet.size());
+                            packet.data(), packet.size());
     return errNone;
 }
 

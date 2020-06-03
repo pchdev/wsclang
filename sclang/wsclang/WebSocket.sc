@@ -73,7 +73,7 @@ WebSocketConnection
 		^this.primitiveFailed
 	}
 
-	writeOsc { |...array|
+	writeOsc { |... array|
 		_WebSocketConnectionWriteOsc
 		^this.primitiveFailed
 	}
